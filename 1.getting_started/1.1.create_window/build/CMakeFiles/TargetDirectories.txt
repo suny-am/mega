@@ -1,3 +1,0 @@
-/Users/maynus/Projects/Personal/learn-webgpu/1.getting_started/1.1.create_window/build/CMakeFiles/App.dir
-/Users/maynus/Projects/Personal/learn-webgpu/1.getting_started/1.1.create_window/build/CMakeFiles/edit_cache.dir
-/Users/maynus/Projects/Personal/learn-webgpu/1.getting_started/1.1.create_window/build/CMakeFiles/rebuild_cache.dir

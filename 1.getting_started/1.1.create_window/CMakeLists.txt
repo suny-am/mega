@@ -21,3 +21,15 @@ set_target_properties(App PROPERTIES CXX_STANDARD 17)
 # Turn all warnings on and treat them as errors so that are not
 # tempted to ignore them (See utils.cmake for details).
 target_treat_all_warnings_as_errors(App)
+
+include(FetchContent)
+FetchContent_Declare(
+  webgpu
+  GIT_REPOSITORY https://github.com/eliemichel/WebGPU-distribution
+  GIT_TAG        main
+)
+FetchContent_MakeAvailable(webgpu)
+
+target_link_libraries(App PRIVATE webgpu)
+
+target_copy_webgpu_binaries(App)

@@ -1,6 +1,12 @@
 # Prerequisites
 *.d
 
+# Build
+[Bb]uild/
+[Bb]uild-dawn/
+[Bb]uild-wgpu/
+[Bb]uild-emscripten/
+
 # Compiled Object files
 *.slo
 *.lo
