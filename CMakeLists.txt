@@ -9,9 +9,14 @@ project(
 add_subdirectory(webgpu)
 
 # We specify that we want to create a target of type executable, called "App"
-add_executable(App main.cpp)
+add_executable(App 
+          main.cpp
+          webgpu-utils.h
+          webgpu-utils.cpp)
 
 target_link_libraries(App PRIVATE webgpu)
+
+target_copy_webgpu_binaries(App)
 
 # Set some recommended properties to configure the version of C++ and treat
 # warnings as errors
@@ -41,5 +46,3 @@ if(EMSCRIPTEN)
   set_target_properties(App PROPERTIES SUFFIX ".html")
   target_link_options((App PRICVATE -sASYNCIFY))
 endif()
-
-target_copy_webgpu_binaries(App)
