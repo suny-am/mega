@@ -187,7 +187,7 @@ _For more examples, please refer to the [Documentation](https://example.com)_
     - [x] Project Setup
     - [x] Hello WebGPU
     - [x] Adapter and Device
-    - [ ] The Command Queue
+    - [x] The Command Queue
     - [ ] Opening a Window
     - [ ] First Color
     - [ ] C++ Wrapper
