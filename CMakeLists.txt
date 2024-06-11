@@ -6,15 +6,21 @@ project(
   LANGUAGES CXX C # programming languages used by the project
 )
 
+if(NOT EMSCRIPTEN)
+  add_subdirectory(glfw)
+else()
+  add_library(glfw INTERFACE)
+  target_link_options(glfw INTERFACE -sUSE_GLFW=3)
+endif()
+
+add_subdirectory(glfw3webgpu)
+
 add_subdirectory(webgpu)
 
 # We specify that we want to create a target of type executable, called "App"
-add_executable(App 
-          main.cpp
-          webgpu-utils.h
-          webgpu-utils.cpp)
+add_executable(App main.cpp webgpu-utils.h webgpu-utils.cpp)
 
-target_link_libraries(App PRIVATE webgpu)
+target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu)
 
 target_copy_webgpu_binaries(App)
 

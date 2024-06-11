@@ -1,11 +1,12 @@
-// utilities
 #include "webgpu-utils.h"
 
 #include <webgpu/webgpu.h>
-
 #ifdef WEBGPU_BACKEND_WGPU
 #include <webgpu/wgpu.h>
 #endif // WEBGPU_BACKEND_WGPU
+
+#include <GLFW/glfw3.h>
+#include <glfw3webgpu.h>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -15,13 +16,74 @@
 #include <cassert>
 #include <vector>
 
-int main(int, char **)
+class Application
 {
+public:
+	bool Initialize();
+
+	void Terminate();
+
+	void MainLoop();
+
+	bool IsRunning();
+
+private:
+	GLFWwindow *window;
+	WGPUDevice device;
+	WGPUQueue queue;
+	WGPUSurface surface;
+};
+
+int main()
+{
+	Application app;
+
+	if (!app.Initialize())
+	{
+		return 1;
+	}
+
+#ifdef __EMSCRIPTEN__
+	auto callback = [](void *arg)
+	{
+		Application *app = reinterpret_cast<Application *>(arg);
+		pApp->MainLoop();
+	};
+
+	emscripten_set_main_loop_arg(callback, &app, 0, true);
+#else  // __EMSCRIPTEN__
+	while (app.IsRunning())
+	{
+		app.MainLoop();
+	}
+#endif // __EMSCRIPTEN__
+
+	return 0;
+}
+
+bool Application::Initialize()
+{
+	if (!glfwInit())
+	{
+		std::cerr << "Could not initialize GLFW!" << std::endl;
+		return 1;
+	}
+
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+	window = glfwCreateWindow(640, 480, "My Window", nullptr, nullptr);
+	if (!window)
+	{
+		std::cerr << "Could not create window!" << std::endl;
+		glfwTerminate();
+		return 1;
+	}
+
 	WGPUInstanceDescriptor desc = {};
 	desc.nextInChain = nullptr;
 
 #ifdef WEBGPU_BACKEND_DAWN
-	// Make sure the uncaputed error callback is called as soon as an error
+	// Make sure the uncaptured error callback is called as soon as an error
 	// occurs, rather than at the next call to "wgpuDeviceTick"
 	WGPUDawnTogglesDescriptor toggles;
 	toggles.chain.next = nullptr;
@@ -48,22 +110,25 @@ int main(int, char **)
 	std::cout << "WGPU instance: " << instance << std::endl;
 
 	std::cout << "Requesting adapter..." << std::endl;
+	surface = glfwGetWGPUSurface(instance, window);
+
 	WGPURequestAdapterOptions adapterOpts = {};
 	adapterOpts.nextInChain = nullptr;
+	adapterOpts.compatibleSurface = surface;
+
 	WGPUAdapter adapter = requestAdapterSync(instance, &adapterOpts);
 	std::cout << "Got adapter: " << adapter << std::endl;
 
-	// Instance is no no longer needed after acquiring the adapter
 	wgpuInstanceRelease(instance);
 
 	std::cout << "Requesting device..." << std::endl;
 	WGPUDeviceDescriptor deviceDesc = {};
 	deviceDesc.nextInChain = nullptr;
-	deviceDesc.label = "iGPU Device";
+	deviceDesc.label = "My device";
 	deviceDesc.requiredFeatureCount = 0;
 	deviceDesc.requiredLimits = nullptr;
 	deviceDesc.defaultQueue.nextInChain = nullptr;
-	deviceDesc.defaultQueue.label = "default queue";
+	deviceDesc.defaultQueue.label = "My default queue";
 	// default callback used when device is no longer available for whatever reason
 	deviceDesc.deviceLostCallback = [](WGPUDeviceLostReason reason, char const *message, void * /* pUserData */)
 	{
@@ -73,8 +138,10 @@ int main(int, char **)
 		std::cout << std::endl;
 	};
 
-	WGPUDevice device = requestDeviceSync(adapter, &deviceDesc);
+	device = requestDeviceSync(adapter, &deviceDesc);
 	std::cout << "Got device: " << device << std::endl;
+
+	wgpuAdapterRelease(adapter);
 
 	// default callback for whenener an error occurs when using the device
 	auto onDeviceError = [](WGPUErrorType type, char const *message, void * /* pUserData*/)
@@ -86,50 +153,31 @@ int main(int, char **)
 	};
 	wgpuDeviceSetUncapturedErrorCallback(device, onDeviceError, nullptr /* pUserData */);
 
-	wgpuAdapterRelease(adapter);
-	
-	// Create Command/Data Queue
-	WGPUQueue queue = wgpuDeviceGetQueue(device);
-	auto onQueueWorkDone = [](WGPUQueueWorkDoneStatus status, void * /* pUserData*/)
-	{
-		std::cout << "Queued work finished with status: " << status << std::endl;
-	};
-	wgpuQueueOnSubmittedWorkDone(queue, onQueueWorkDone, nullptr /* pUserData*/);
+	queue = wgpuDeviceGetQueue(device);
+	return true;
+}
 
-	// Create Command Encoder
-	WGPUCommandEncoderDescriptor encoderDesc = {};
-	encoderDesc.nextInChain = nullptr;
-	encoderDesc.label = "iGPU command encoder";
-	WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(device, &encoderDesc);
-
-	wgpuCommandEncoderInsertDebugMarker(encoder, "first thing!");
-	wgpuCommandEncoderInsertDebugMarker(encoder, "second thing!");
-
-	// Create Command Buffer
-	WGPUCommandBufferDescriptor cmdBufferDesc = {};
-	cmdBufferDesc.nextInChain = nullptr;
-	cmdBufferDesc.label = "iGPU command buffer";
-	WGPUCommandBuffer command = wgpuCommandEncoderFinish(encoder, &cmdBufferDesc);
-	wgpuCommandEncoderRelease(encoder); // Release encoder after it is finished
-
-	std::cout << "Submitting command..." << std::endl;
-	wgpuQueueSubmit(queue, 1, &command);
-	wgpuCommandBufferRelease(command);
-	std::cout << "Command submitted." << std::endl;
-	for (int i = 0; i < 5; ++i)
-	{
-		std::cout << "Tick/Poll device..." << std::endl;
-#if defined(WEBGPU_BACKEND_DAWN)
-		wgpuDeviceTick(device);
-#elif defined(WEBGPU_BACKEND_WGPU)
-		wgpuDevicePoll(device, false, nullptr);
-#elif defined(WEBGPU_BACKEND_EMSCRIPTEN)
-		emscripten_sleep(100);
-#endif
-	}
-
+void Application::Terminate()
+{
 	wgpuQueueRelease(queue);
+	wgpuSurfaceRelease(surface);
 	wgpuDeviceRelease(device);
+	glfwDestroyWindow(window);
+	glfwTerminate();
+}
 
-	return 0;
+void Application::MainLoop()
+{
+	glfwPollEvents();
+
+#if defined(WEBGPU_BACKEND_DAWN)
+	wgpuDeviceTick(device);
+#elif defined(WEBGPU_BACKEND_WGPU)
+	wgpuDevicePoll(device, false, nullptr);
+#endif
+}
+
+bool Application::IsRunning()
+{
+	return !glfwWindowShouldClose(window);
 }
