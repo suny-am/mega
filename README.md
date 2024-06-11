@@ -184,9 +184,9 @@ _For more examples, please refer to the [Documentation](https://example.com)_
 ## Roadmap
 
 - [ ] Getting Started 
-    - [ ] Project Setup
-    - [ ] Hello WebGPU
-    - [ ] Adapter and Device
+    - [x] Project Setup
+    - [x] Hello WebGPU
+    - [x] Adapter and Device
     - [ ] The Command Queue
     - [ ] Opening a Window
     - [ ] First Color
