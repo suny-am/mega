@@ -14,6 +14,26 @@
 
 using namespace wgpu;
 
+const char *shaderSource = R"(
+@vertex
+fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4f {
+    var p = vec2f(0.0, 0.0);
+    if in_vertex_index == 0u {
+        p = vec2f(-0.5, -0.5);
+    } else if (in_vertex_index == 1u) {
+        p = vec2f(0.5, -0.5);
+    } else {
+        p = vec2f(0.0, 0.5);
+    }
+    return vec4f(p, 0.0, 1.0);
+}
+
+@fragment
+fn fs_main() -> @location(0) vec4f {
+    return vec4f(0.0, 0.4, 1.0, 1.0);
+}
+)";
+
 class Application
 {
 public:
@@ -27,6 +47,7 @@ public:
 
 private:
 	TextureView GetNextSurfaceTextureView();
+	void InitializePipeline();
 
 private:
 	GLFWwindow *window;
@@ -34,6 +55,8 @@ private:
 	Queue queue;
 	Surface surface;
 	std::unique_ptr<ErrorCallback> uncapturedErrorCallbackHandle;
+	TextureFormat surfaceFormat = TextureFormat::Undefined;
+	RenderPipeline renderPipeline;
 };
 
 int main()
@@ -49,7 +72,7 @@ int main()
 	auto callback = [](void *arg)
 	{
 		Application *pApp = reinterpret_cast<Application *>(arg);
-		pApp->MainLoop(); // 4. We can use the application object
+		pApp->MainLoop();
 	};
 	emscripten_set_main_loop_arg(callback, &app, 0, true);
 #else  // __EMSCRIPTEN__
@@ -64,7 +87,6 @@ int main()
 
 bool Application::Initialize()
 {
-	// Open window
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
@@ -113,7 +135,7 @@ bool Application::Initialize()
 	surfaceConfig.width = 640;
 	surfaceConfig.height = 480;
 	surfaceConfig.usage = TextureUsage::RenderAttachment;
-	TextureFormat surfaceFormat = surface.getPreferredFormat(adapter);
+	surfaceFormat = surface.getPreferredFormat(adapter);
 	surfaceConfig.format = surfaceFormat;
 
 	adapter.release();
@@ -126,11 +148,80 @@ bool Application::Initialize()
 
 	surface.configure(surfaceConfig);
 
+	InitializePipeline();
+
 	return true;
+}
+
+void Application::InitializePipeline()
+{
+	ShaderModuleDescriptor shaderModuleDesc;
+#ifdef WEBGPU_BACKEND_WGPU
+	shaderModuleDesc.hintCount = 0;
+	shaderModuleDesc.hints = nullptr;
+#endif
+
+	ShaderModuleWGSLDescriptor shaderCodeDesc;
+	shaderCodeDesc.chain.next = nullptr;
+	shaderCodeDesc.chain.sType = SType::ShaderModuleWGSLDescriptor;
+	shaderModuleDesc.nextInChain = &shaderCodeDesc.chain;
+	shaderCodeDesc.code = shaderSource;
+	ShaderModule shaderModule = device.createShaderModule(shaderModuleDesc);
+
+	RenderPipelineDescriptor renderPipelineDesc;
+
+	renderPipelineDesc.vertex.bufferCount = 0;
+	renderPipelineDesc.vertex.buffers = nullptr;
+
+	renderPipelineDesc.vertex.module = shaderModule;
+	renderPipelineDesc.vertex.entryPoint = "vs_main";
+	renderPipelineDesc.vertex.constantCount = 0;
+	renderPipelineDesc.vertex.constants = nullptr;
+
+	renderPipelineDesc.primitive.topology = PrimitiveTopology::TriangleList;
+	renderPipelineDesc.primitive.stripIndexFormat = IndexFormat::Undefined;
+	renderPipelineDesc.primitive.frontFace = FrontFace::CCW;
+	renderPipelineDesc.primitive.cullMode = CullMode::None;
+
+	FragmentState fragmentState;
+	fragmentState.module = shaderModule;
+	fragmentState.entryPoint = "fs_main";
+	fragmentState.constantCount = 0;
+	fragmentState.constants = nullptr;
+
+	BlendState blendState;
+	blendState.color.srcFactor = BlendFactor::SrcAlpha;
+	blendState.color.dstFactor = BlendFactor::OneMinusSrcAlpha;
+	blendState.color.operation = BlendOperation::Add;
+	blendState.color.srcFactor = BlendFactor::Zero;
+	blendState.color.dstFactor = BlendFactor::One;
+	blendState.color.operation = BlendOperation::Add;
+
+	ColorTargetState colorTargetState;
+	colorTargetState.format = surfaceFormat;
+	colorTargetState.blend = &blendState;
+	colorTargetState.writeMask = ColorWriteMask::All;
+
+	fragmentState.targetCount = 1;
+	fragmentState.targets = &colorTargetState;
+	renderPipelineDesc.fragment = &fragmentState;
+	
+	renderPipelineDesc.depthStencil = nullptr;
+
+	renderPipelineDesc.multisample.count = 1;
+	renderPipelineDesc.multisample.mask = ~0u;
+	renderPipelineDesc.multisample.alphaToCoverageEnabled = false;
+
+	renderPipelineDesc.layout = nullptr;
+
+	renderPipeline = device.createRenderPipeline(renderPipelineDesc);
+
+	shaderModule.release();
 }
 
 void Application::Terminate()
 {
+	renderPipeline.release();
 	surface.unconfigure();
 	queue.release();
 	surface.release();
@@ -168,12 +259,14 @@ void Application::MainLoop()
 	renderPassDesc.depthStencilAttachment = nullptr;
 	renderPassDesc.timestampWrites = nullptr;
 
-	// Create the render pass and end it immediately (we only clear the screen but do not draw anything)
 	RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
+	
+	renderPass.setPipeline(renderPipeline);
+	renderPass.draw(3, 1, 0, 0);
+	
 	renderPass.end();
 	renderPass.release();
 
-	// Finally encode and submit the render pass
 	CommandBufferDescriptor cmdBufferDescriptor = {};
 	cmdBufferDescriptor.label = "Command buffer";
 	CommandBuffer command = encoder.finish(cmdBufferDescriptor);
@@ -184,7 +277,6 @@ void Application::MainLoop()
 	command.release();
 	std::cout << "Command submitted." << std::endl;
 
-	// At the enc of the frame
 	targetView.release();
 #ifndef __EMSCRIPTEN__
 	surface.present();
