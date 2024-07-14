@@ -34,6 +34,20 @@ fn fs_main() -> @location(0) vec4f {
 }
 )";
 
+void wgpuPollEvents([[maybe_unused]] Device device, [[maybe_unused]] bool yieldToWebBrowser)
+{
+#if defined(WEBGPU_BACKEND_DAWN)
+	device.tick();
+#elif defined(WEBGPU_BACKEND_WGPU)
+	device.poll(false);
+#elif defined(WEBGPU_BACKEND_EMPSCRIPTEN)
+	if (yieldToWebBrowser)
+	{
+		emscripten_sleep(100);
+	}
+#endif
+}
+
 class Application
 {
 public:
@@ -48,6 +62,7 @@ public:
 private:
 	TextureView GetNextSurfaceTextureView();
 	void InitializePipeline();
+	void PlayingWithBuffers();
 
 private:
 	GLFWwindow *window;
@@ -138,8 +153,6 @@ bool Application::Initialize()
 	surfaceFormat = surface.getPreferredFormat(adapter);
 	surfaceConfig.format = surfaceFormat;
 
-	adapter.release();
-
 	surfaceConfig.viewFormatCount = 0;
 	surfaceConfig.viewFormats = nullptr;
 	surfaceConfig.device = device;
@@ -148,75 +161,13 @@ bool Application::Initialize()
 
 	surface.configure(surfaceConfig);
 
+	adapter.release();
+
 	InitializePipeline();
 
+	PlayingWithBuffers();
+
 	return true;
-}
-
-void Application::InitializePipeline()
-{
-	ShaderModuleDescriptor shaderModuleDesc;
-#ifdef WEBGPU_BACKEND_WGPU
-	shaderModuleDesc.hintCount = 0;
-	shaderModuleDesc.hints = nullptr;
-#endif
-
-	ShaderModuleWGSLDescriptor shaderCodeDesc;
-	shaderCodeDesc.chain.next = nullptr;
-	shaderCodeDesc.chain.sType = SType::ShaderModuleWGSLDescriptor;
-	shaderModuleDesc.nextInChain = &shaderCodeDesc.chain;
-	shaderCodeDesc.code = shaderSource;
-	ShaderModule shaderModule = device.createShaderModule(shaderModuleDesc);
-
-	RenderPipelineDescriptor renderPipelineDesc;
-
-	renderPipelineDesc.vertex.bufferCount = 0;
-	renderPipelineDesc.vertex.buffers = nullptr;
-
-	renderPipelineDesc.vertex.module = shaderModule;
-	renderPipelineDesc.vertex.entryPoint = "vs_main";
-	renderPipelineDesc.vertex.constantCount = 0;
-	renderPipelineDesc.vertex.constants = nullptr;
-
-	renderPipelineDesc.primitive.topology = PrimitiveTopology::TriangleList;
-	renderPipelineDesc.primitive.stripIndexFormat = IndexFormat::Undefined;
-	renderPipelineDesc.primitive.frontFace = FrontFace::CCW;
-	renderPipelineDesc.primitive.cullMode = CullMode::None;
-
-	FragmentState fragmentState;
-	fragmentState.module = shaderModule;
-	fragmentState.entryPoint = "fs_main";
-	fragmentState.constantCount = 0;
-	fragmentState.constants = nullptr;
-
-	BlendState blendState;
-	blendState.color.srcFactor = BlendFactor::SrcAlpha;
-	blendState.color.dstFactor = BlendFactor::OneMinusSrcAlpha;
-	blendState.color.operation = BlendOperation::Add;
-	blendState.color.srcFactor = BlendFactor::Zero;
-	blendState.color.dstFactor = BlendFactor::One;
-	blendState.color.operation = BlendOperation::Add;
-
-	ColorTargetState colorTargetState;
-	colorTargetState.format = surfaceFormat;
-	colorTargetState.blend = &blendState;
-	colorTargetState.writeMask = ColorWriteMask::All;
-
-	fragmentState.targetCount = 1;
-	fragmentState.targets = &colorTargetState;
-	renderPipelineDesc.fragment = &fragmentState;
-	
-	renderPipelineDesc.depthStencil = nullptr;
-
-	renderPipelineDesc.multisample.count = 1;
-	renderPipelineDesc.multisample.mask = ~0u;
-	renderPipelineDesc.multisample.alphaToCoverageEnabled = false;
-
-	renderPipelineDesc.layout = nullptr;
-
-	renderPipeline = device.createRenderPipeline(renderPipelineDesc);
-
-	shaderModule.release();
 }
 
 void Application::Terminate()
@@ -260,10 +211,10 @@ void Application::MainLoop()
 	renderPassDesc.timestampWrites = nullptr;
 
 	RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
-	
+
 	renderPass.setPipeline(renderPipeline);
 	renderPass.draw(3, 1, 0, 0);
-	
+
 	renderPass.end();
 	renderPass.release();
 
@@ -318,4 +269,130 @@ TextureView Application::GetNextSurfaceTextureView()
 	TextureView targetView = texture.createView(viewDescriptor);
 
 	return targetView;
+}
+
+void Application::InitializePipeline()
+{
+	ShaderModuleDescriptor shaderModuleDesc;
+#ifdef WEBGPU_BACKEND_WGPU
+	shaderModuleDesc.hintCount = 0;
+	shaderModuleDesc.hints = nullptr;
+#endif
+
+	ShaderModuleWGSLDescriptor shaderCodeDesc;
+	shaderCodeDesc.chain.next = nullptr;
+	shaderCodeDesc.chain.sType = SType::ShaderModuleWGSLDescriptor;
+	shaderModuleDesc.nextInChain = &shaderCodeDesc.chain;
+	shaderCodeDesc.code = shaderSource;
+	ShaderModule shaderModule = device.createShaderModule(shaderModuleDesc);
+
+	RenderPipelineDescriptor renderPipelineDesc;
+
+	renderPipelineDesc.vertex.bufferCount = 0;
+	renderPipelineDesc.vertex.buffers = nullptr;
+
+	renderPipelineDesc.vertex.module = shaderModule;
+	renderPipelineDesc.vertex.entryPoint = "vs_main";
+	renderPipelineDesc.vertex.constantCount = 0;
+	renderPipelineDesc.vertex.constants = nullptr;
+
+	renderPipelineDesc.primitive.topology = PrimitiveTopology::TriangleList;
+	renderPipelineDesc.primitive.stripIndexFormat = IndexFormat::Undefined;
+	renderPipelineDesc.primitive.frontFace = FrontFace::CCW;
+	renderPipelineDesc.primitive.cullMode = CullMode::None;
+
+	FragmentState fragmentState;
+	fragmentState.module = shaderModule;
+	fragmentState.entryPoint = "fs_main";
+	fragmentState.constantCount = 0;
+	fragmentState.constants = nullptr;
+
+	BlendState blendState;
+	blendState.color.srcFactor = BlendFactor::SrcAlpha;
+	blendState.color.dstFactor = BlendFactor::OneMinusSrcAlpha;
+	blendState.color.operation = BlendOperation::Add;
+	blendState.color.srcFactor = BlendFactor::Zero;
+	blendState.color.dstFactor = BlendFactor::One;
+	blendState.color.operation = BlendOperation::Add;
+
+	ColorTargetState colorTargetState;
+	colorTargetState.format = surfaceFormat;
+	colorTargetState.blend = &blendState;
+	colorTargetState.writeMask = ColorWriteMask::All;
+
+	fragmentState.targetCount = 1;
+	fragmentState.targets = &colorTargetState;
+	renderPipelineDesc.fragment = &fragmentState;
+
+	renderPipelineDesc.depthStencil = nullptr;
+
+	renderPipelineDesc.multisample.count = 1;
+	renderPipelineDesc.multisample.mask = ~0u;
+	renderPipelineDesc.multisample.alphaToCoverageEnabled = false;
+
+	renderPipelineDesc.layout = nullptr;
+
+	renderPipeline = device.createRenderPipeline(renderPipelineDesc);
+
+	shaderModule.release();
+}
+
+void Application::PlayingWithBuffers() {
+	BufferDescriptor bufferDesc;
+	bufferDesc.label = "Some GPU-side data buffer";
+	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::CopySrc;
+	bufferDesc.size = 16;
+	bufferDesc.mappedAtCreation = false;
+	Buffer buffer1 = device.createBuffer(bufferDesc);
+	bufferDesc.label = "Output buffer";
+	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::MapRead;
+	Buffer buffer2 = device.createBuffer(bufferDesc);
+	
+	std::vector<uint8_t> numbers(16);
+	for (uint8_t i = 0; i < 16; ++i) numbers[i] = i;
+
+	queue.writeBuffer(buffer1, 0, numbers.data(), numbers.size());
+	
+	CommandEncoder encoder = device.createCommandEncoder(Default);
+	
+	encoder.copyBufferToBuffer(buffer1, 0, buffer2, 0, 16);
+	
+	CommandBuffer command = encoder.finish(Default);
+	encoder.release();
+	queue.submit(1, &command);
+	command.release();
+	
+	struct Context {
+		bool ready;
+		Buffer buffer;
+	};
+	
+	auto onBuffer2Mapped = [](WGPUBufferMapAsyncStatus status, void* pUserData) {
+		Context* context = reinterpret_cast<Context*>(pUserData);
+		context->ready = true;
+		std::cout << "Buffer 2 mapped with status " << status << std::endl;
+		if (status != BufferMapAsyncStatus::Success) return;
+	
+		uint8_t* bufferData = (uint8_t*)context->buffer.getConstMappedRange(0, 16);
+		
+		std::cout << "bufferData = [";
+		for (int i = 0; i < 16; ++i) {
+			if (i > 0) std::cout << ", ";
+			std::cout << (int)bufferData[i];
+		}
+		std::cout << "]" << std::endl;
+		
+		context->buffer.unmap();
+	};
+	
+	Context context = { false, buffer2 };
+	
+	wgpuBufferMapAsync(buffer2, MapMode::Read, 0, 16, onBuffer2Mapped, (void*)&context);
+	
+	while (!context.ready) {
+		wgpuPollEvents(device, true /* yieldToBrowser */);
+	}
+	
+	buffer1.release();
+	buffer2.release();
 }
