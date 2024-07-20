@@ -30,7 +30,8 @@ struct VertexOutput
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
 	var out: VertexOutput;
-	out.position = vec4f(in.position, 0.0, 1.0);
+	let ratio = 640.0 / 480.0;
+	out.position = vec4f(in.position.x, in.position.y * ratio, 0.0, 1.0);
 	out.color = in.color; 
 	return out;
 }
@@ -67,9 +68,9 @@ private:
 	std::unique_ptr<ErrorCallback> uncapturedErrorCallbackHandle;
 	TextureFormat surfaceFormat = TextureFormat::Undefined;
 	RenderPipeline renderPipeline;
-	Buffer positionBuffer;
-	Buffer colorBuffer;
-	uint32_t vertexCount;
+	Buffer pointBuffer;
+	Buffer indexBuffer;
+	uint32_t indexCount;
 };
 
 int main()
@@ -169,8 +170,8 @@ bool Application::Initialize()
 
 void Application::Terminate()
 {
-	positionBuffer.release();
-	colorBuffer.release();
+	pointBuffer.release();
+	indexBuffer.release();
 	renderPipeline.release();
 	surface.unconfigure();
 	queue.release();
@@ -211,17 +212,12 @@ void Application::MainLoop()
 
 	RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
-	std::vector<VertexBufferLayout> vertexBufferLayouts(2);
-
 	renderPass.setPipeline(renderPipeline);
 
-	// Set vertex buffers while encoding the render pass
-	renderPass.setVertexBuffer(0, positionBuffer, 0, positionBuffer.getSize());
-	renderPass.setVertexBuffer(1, colorBuffer, 0, colorBuffer.getSize());
-	//                         ^ Add a second call to set the second vertex buffer
+	renderPass.setVertexBuffer(0, pointBuffer, 0, pointBuffer.getSize());
+	renderPass.setIndexBuffer(indexBuffer, IndexFormat::Uint16, 0, indexBuffer.getSize());
 
-	// We use the `vertexCount` variable instead of hard-coding the vertex count
-	renderPass.draw(vertexCount, 1, 0, 0);
+	renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
 
 	renderPass.end();
 	renderPass.release();
@@ -296,32 +292,25 @@ void Application::InitializePipeline()
 
 	RenderPipelineDescriptor renderPipelineDesc;
 
-	std::vector<VertexBufferLayout> vertexBufferLayouts(2);
+	VertexBufferLayout vertexBufferLayout;
+	std::vector<VertexAttribute> vertexAttribs(2);
 
-	// Position attribute remains untouched
-	VertexAttribute positionAttrib;
-	positionAttrib.shaderLocation = 0; // @location(0)
-	positionAttrib.format = VertexFormat::Float32x2; // size of position
-	positionAttrib.offset = 0;
+	vertexAttribs[0].shaderLocation = 0;
+	vertexAttribs[0].format = VertexFormat::Float32x2;
+	vertexAttribs[0].offset = 0;
 
-	vertexBufferLayouts[0].attributeCount = 1;
-	vertexBufferLayouts[0].attributes = &positionAttrib;
-	vertexBufferLayouts[0].arrayStride = 2 * sizeof(float); // stride = size of position
-	vertexBufferLayouts[0].stepMode = VertexStepMode::Vertex;
+	vertexAttribs[1].shaderLocation = 1;
+	vertexAttribs[1].format = VertexFormat::Float32x3;
+	vertexAttribs[1].offset = 2  * sizeof(float);
 
-	// Color attribute
-	VertexAttribute colorAttrib;
-	colorAttrib.shaderLocation = 1; // @location(1)
-	colorAttrib.format = VertexFormat::Float32x3; // size of color
-	colorAttrib.offset = 0;
+	vertexBufferLayout.attributeCount = static_cast<uint32_t>(vertexAttribs.size());
+	vertexBufferLayout.attributes = vertexAttribs.data();
 
-	vertexBufferLayouts[1].attributeCount = 1;
-	vertexBufferLayouts[1].attributes = &colorAttrib;
-	vertexBufferLayouts[1].arrayStride = 3 * sizeof(float); // stride = size of color
-	vertexBufferLayouts[1].stepMode = VertexStepMode::Vertex;
+	vertexBufferLayout.arrayStride = 5 * sizeof(float);
+	vertexBufferLayout.stepMode = VertexStepMode::Vertex;
 
-	renderPipelineDesc.vertex.bufferCount = static_cast<uint32_t>(vertexBufferLayouts.size());
-	renderPipelineDesc.vertex.buffers = vertexBufferLayouts.data();
+	renderPipelineDesc.vertex.buffers = &vertexBufferLayout;
+	renderPipelineDesc.vertex.bufferCount = 1;
 
 	renderPipelineDesc.vertex.module = shaderModule;
 	renderPipelineDesc.vertex.entryPoint = "vs_main";
@@ -377,51 +366,47 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 	RequiredLimits requiredLimits = Default;
 
 	requiredLimits.limits.maxVertexAttributes = 2;
-	requiredLimits.limits.maxVertexBuffers = 2;
-	requiredLimits.limits.maxBufferSize = 6 * 3 * sizeof(float);
-	requiredLimits.limits.maxVertexBufferArrayStride = 3 * sizeof(float);
+	requiredLimits.limits.maxVertexBuffers = 1;
+	requiredLimits.limits.maxBufferSize = 6 * 5 * sizeof(float);
+	requiredLimits.limits.maxVertexBufferArrayStride = 5 * sizeof(float);
+	requiredLimits.limits.maxInterStageShaderComponents = 3;
 	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
 	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
-	requiredLimits.limits.maxInterStageShaderComponents = 3;
 
 	return requiredLimits;
 }
 
 void Application::InitializeBuffers()
 {
-	std::vector<float> positionData = {
-		-0.5, -0.5,
-		+0.5, -0.5,
-		+0.0, +0.5,
-		-0.55f, -0.5,
-		-0.05f, +0.5,
-		-0.55f, +0.5
+	std::vector<float> pointData = {
+		-0.5, -0.5,		1.0, 0.0, 0.0,
+		+0.5, -0.5, 	0.0, 1.0, 0.0,
+		+0.5, +0.5, 	0.0, 0.0, 1.0,
+		-0.5, +0.5, 	1.0, 1.0, 0.0
 	};
 
-	std::vector<float> colorData = {
-		1.0, 0.0, 0.0,
-		0.0, 1.0, 0.0,
-		0.0, 0.0, 1.0,
-		1.0, 1.0, 0.0,
-		1.0, 0.0, 1.0,
-		0.0, 1.0, 1.0
+	std::vector<uint16_t> indexData = {
+		0, 1, 2,
+		0, 2, 3
 	};
 
-	vertexCount = static_cast<uint32_t>(positionData.size() / 2);
-	assert(vertexCount == static_cast<uint32_t>(colorData.size() / 3));
+	indexCount = static_cast<uint32_t>(indexData.size());
 
-	// Create vertex buffers
 	BufferDescriptor bufferDesc;
+
+	bufferDesc.label = "Position Data";
+	bufferDesc.size = pointData.size() * sizeof(float);
 	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
 	bufferDesc.mappedAtCreation = false;
+	pointBuffer = device.createBuffer(bufferDesc);
 
-	bufferDesc.label = "Vertex Position";
-	bufferDesc.size = positionData.size() * sizeof(float);
-	positionBuffer = device.createBuffer(bufferDesc);
-	queue.writeBuffer(positionBuffer, 0, positionData.data(), bufferDesc.size);
+	queue.writeBuffer(pointBuffer, 0, pointData.data(), bufferDesc.size);
 
-	bufferDesc.label = "Vertex Color";
-	bufferDesc.size = colorData.size() * sizeof(float);
-	colorBuffer = device.createBuffer(bufferDesc);
-	queue.writeBuffer(colorBuffer, 0, colorData.data(), bufferDesc.size);
-};
+	bufferDesc.label = "Index Data";
+	bufferDesc.size = indexData.size() * sizeof(uint16_t);
+	bufferDesc.size = (bufferDesc.size + 3) & ~3;
+	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Index;
+	indexBuffer = device.createBuffer(bufferDesc);
+
+	queue.writeBuffer(indexBuffer, 0, indexData.data(), bufferDesc.size);
+}
