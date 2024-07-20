@@ -14,17 +14,33 @@
 
 using namespace wgpu;
 
-const char *shaderSource = R"(
+const char* shaderSource = R"(
+struct VertexInput 
+{
+	@location(0) position: vec2f,
+	@location(1) color: vec3f,
+};
+
+struct VertexOutput 
+{
+	@builtin(position) position: vec4f,
+	@location(0) color: vec3f,
+};
+
 @vertex
-fn vs_main(@location(0) in_vertex_position: vec2f) -> @builtin(position) vec4f {
-    return vec4f(in_vertex_position, 0.0, 1.0);
+fn vs_main(in: VertexInput) -> VertexOutput {
+	var out: VertexOutput;
+	out.position = vec4f(in.position, 0.0, 1.0);
+	out.color = in.color; 
+	return out;
 }
 
 @fragment
-fn fs_main() -> @location(0) vec4f {
-    return vec4f(0.0, 0.4, 1.0, 1.0);
+fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+	return vec4f(in.color, 1.0); 
 }
 )";
+
 
 class Application
 {
@@ -44,14 +60,15 @@ private:
 	void InitializeBuffers();
 
 private:
-	GLFWwindow *window;
+	GLFWwindow* window;
 	Device device;
 	Queue queue;
 	Surface surface;
 	std::unique_ptr<ErrorCallback> uncapturedErrorCallbackHandle;
 	TextureFormat surfaceFormat = TextureFormat::Undefined;
 	RenderPipeline renderPipeline;
-	Buffer vertexBuffer;
+	Buffer positionBuffer;
+	Buffer colorBuffer;
 	uint32_t vertexCount;
 };
 
@@ -65,11 +82,11 @@ int main()
 	}
 
 #ifdef __EMSCRIPTEN__
-	auto callback = [](void *arg)
-	{
-		Application *pApp = reinterpret_cast<Application *>(arg);
-		pApp->MainLoop();
-	};
+	auto callback = [](void* arg)
+		{
+			Application* pApp = reinterpret_cast<Application*>(arg);
+			pApp->MainLoop();
+		};
 	emscripten_set_main_loop_arg(callback, &app, 0, true);
 #else  // __EMSCRIPTEN__
 	while (app.IsRunning())
@@ -106,23 +123,23 @@ bool Application::Initialize()
 	deviceDesc.requiredLimits = nullptr;
 	deviceDesc.defaultQueue.nextInChain = nullptr;
 	deviceDesc.defaultQueue.label = "The default queue";
-	deviceDesc.deviceLostCallback = [](WGPUDeviceLostReason reason, char const *message, void * /* pUserData */)
-	{
-		std::cout << "Device lost: reason " << reason;
-		if (message)
-			std::cout << " (" << message << ")";
-		std::cout << std::endl;
-	};
+	deviceDesc.deviceLostCallback = [](WGPUDeviceLostReason reason, char const* message, void* /* pUserData */)
+		{
+			std::cout << "Device lost: reason " << reason;
+			if (message)
+				std::cout << " (" << message << ")";
+			std::cout << std::endl;
+		};
 	RequiredLimits requiredLimits = GetRequiredLimits(adapter);
 	deviceDesc.requiredLimits = &requiredLimits;
 	device = adapter.requestDevice(deviceDesc);
 	std::cout << "Got device: " << device << std::endl;
 
-	uncapturedErrorCallbackHandle = device.setUncapturedErrorCallback([](ErrorType type, char const *message)
+	uncapturedErrorCallbackHandle = device.setUncapturedErrorCallback([](ErrorType type, char const* message)
 																	  {
-		std::cout << "Uncaptured device error: type " << type;
-		if (message) std::cout << " (" << message << ")";
-		std::cout << std::endl; });
+																		  std::cout << "Uncaptured device error: type " << type;
+																		  if (message) std::cout << " (" << message << ")";
+																		  std::cout << std::endl; });
 
 	queue = device.getQueue();
 
@@ -152,7 +169,8 @@ bool Application::Initialize()
 
 void Application::Terminate()
 {
-	vertexBuffer.release();
+	positionBuffer.release();
+	colorBuffer.release();
 	renderPipeline.release();
 	surface.unconfigure();
 	queue.release();
@@ -181,7 +199,7 @@ void Application::MainLoop()
 	renderPassColorAttachment.resolveTarget = nullptr;
 	renderPassColorAttachment.loadOp = LoadOp::Clear;
 	renderPassColorAttachment.storeOp = StoreOp::Store;
-	renderPassColorAttachment.clearValue = WGPUColor{0.9, 0.1, 0.2, 1.0};
+	renderPassColorAttachment.clearValue = Color{ 0.05, 0.05, 0.05, 1.0 };
 #ifndef WEBGPU_BACKEND_WGPU
 	renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
 #endif // NOT WEBGPU_BACKEND_WGPU
@@ -193,10 +211,16 @@ void Application::MainLoop()
 
 	RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
+	std::vector<VertexBufferLayout> vertexBufferLayouts(2);
+
 	renderPass.setPipeline(renderPipeline);
 
-	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexBuffer.getSize());
+	// Set vertex buffers while encoding the render pass
+	renderPass.setVertexBuffer(0, positionBuffer, 0, positionBuffer.getSize());
+	renderPass.setVertexBuffer(1, colorBuffer, 0, colorBuffer.getSize());
+	//                         ^ Add a second call to set the second vertex buffer
 
+	// We use the `vertexCount` variable instead of hard-coding the vertex count
 	renderPass.draw(vertexCount, 1, 0, 0);
 
 	renderPass.end();
@@ -272,20 +296,32 @@ void Application::InitializePipeline()
 
 	RenderPipelineDescriptor renderPipelineDesc;
 
-	VertexBufferLayout vertexBufferLayout;
+	std::vector<VertexBufferLayout> vertexBufferLayouts(2);
 
+	// Position attribute remains untouched
 	VertexAttribute positionAttrib;
-	positionAttrib.shaderLocation = 0;
-	positionAttrib.format = VertexFormat::Float32x2;
+	positionAttrib.shaderLocation = 0; // @location(0)
+	positionAttrib.format = VertexFormat::Float32x2; // size of position
 	positionAttrib.offset = 0;
 
-	vertexBufferLayout.attributeCount = 1;
-	vertexBufferLayout.attributes = &positionAttrib;
-	vertexBufferLayout.arrayStride = 2 * sizeof(float);
-	vertexBufferLayout.stepMode = VertexStepMode::Vertex;
+	vertexBufferLayouts[0].attributeCount = 1;
+	vertexBufferLayouts[0].attributes = &positionAttrib;
+	vertexBufferLayouts[0].arrayStride = 2 * sizeof(float); // stride = size of position
+	vertexBufferLayouts[0].stepMode = VertexStepMode::Vertex;
 
-	renderPipelineDesc.vertex.bufferCount = 1;
-	renderPipelineDesc.vertex.buffers = &vertexBufferLayout;
+	// Color attribute
+	VertexAttribute colorAttrib;
+	colorAttrib.shaderLocation = 1; // @location(1)
+	colorAttrib.format = VertexFormat::Float32x3; // size of color
+	colorAttrib.offset = 0;
+
+	vertexBufferLayouts[1].attributeCount = 1;
+	vertexBufferLayouts[1].attributes = &colorAttrib;
+	vertexBufferLayouts[1].arrayStride = 3 * sizeof(float); // stride = size of color
+	vertexBufferLayouts[1].stepMode = VertexStepMode::Vertex;
+
+	renderPipelineDesc.vertex.bufferCount = static_cast<uint32_t>(vertexBufferLayouts.size());
+	renderPipelineDesc.vertex.buffers = vertexBufferLayouts.data();
 
 	renderPipelineDesc.vertex.module = shaderModule;
 	renderPipelineDesc.vertex.entryPoint = "vs_main";
@@ -340,34 +376,52 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 
 	RequiredLimits requiredLimits = Default;
 
-	requiredLimits.limits.maxVertexAttributes = 1;
-	requiredLimits.limits.maxVertexBuffers = 1;
-	requiredLimits.limits.maxBufferSize = 6 * 2 * sizeof(float);
-	requiredLimits.limits.maxVertexBufferArrayStride = 2 * sizeof(float);
+	requiredLimits.limits.maxVertexAttributes = 2;
+	requiredLimits.limits.maxVertexBuffers = 2;
+	requiredLimits.limits.maxBufferSize = 6 * 3 * sizeof(float);
+	requiredLimits.limits.maxVertexBufferArrayStride = 3 * sizeof(float);
 	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
 	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
+	requiredLimits.limits.maxInterStageShaderComponents = 3;
 
 	return requiredLimits;
 }
 
 void Application::InitializeBuffers()
 {
-	std::vector<float> vertexData = {
+	std::vector<float> positionData = {
 		-0.5, -0.5,
 		+0.5, -0.5,
 		+0.0, +0.5,
-
 		-0.55f, -0.5,
 		-0.05f, +0.5,
-		-0.55f, +0.5};
+		-0.55f, +0.5
+	};
 
-	vertexCount = static_cast<uint32_t>(vertexData.size() / 2);
+	std::vector<float> colorData = {
+		1.0, 0.0, 0.0,
+		0.0, 1.0, 0.0,
+		0.0, 0.0, 1.0,
+		1.0, 1.0, 0.0,
+		1.0, 0.0, 1.0,
+		0.0, 1.0, 1.0
+	};
 
+	vertexCount = static_cast<uint32_t>(positionData.size() / 2);
+	assert(vertexCount == static_cast<uint32_t>(colorData.size() / 3));
+
+	// Create vertex buffers
 	BufferDescriptor bufferDesc;
-	bufferDesc.size = vertexData.size() * sizeof(float);
 	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
 	bufferDesc.mappedAtCreation = false;
-	vertexBuffer = device.createBuffer(bufferDesc);
 
-	queue.writeBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
+	bufferDesc.label = "Vertex Position";
+	bufferDesc.size = positionData.size() * sizeof(float);
+	positionBuffer = device.createBuffer(bufferDesc);
+	queue.writeBuffer(positionBuffer, 0, positionData.data(), bufferDesc.size);
+
+	bufferDesc.label = "Vertex Color";
+	bufferDesc.size = colorData.size() * sizeof(float);
+	colorBuffer = device.createBuffer(bufferDesc);
+	queue.writeBuffer(colorBuffer, 0, colorData.data(), bufferDesc.size);
 };
