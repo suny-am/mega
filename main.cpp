@@ -11,37 +11,13 @@
 #include <iostream>
 #include <cassert>
 #include <vector>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <string>
 
 using namespace wgpu;
-
-const char* shaderSource = R"(
-struct VertexInput 
-{
-	@location(0) position: vec2f,
-	@location(1) color: vec3f,
-};
-
-struct VertexOutput 
-{
-	@builtin(position) position: vec4f,
-	@location(0) color: vec3f,
-};
-
-@vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
-	var out: VertexOutput;
-	let ratio = 640.0 / 480.0;
-	out.position = vec4f(in.position.x, in.position.y * ratio, 0.0, 1.0);
-	out.color = in.color; 
-	return out;
-}
-
-@fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-	return vec4f(in.color, 1.0); 
-}
-)";
-
+namespace fs = std::filesystem;
 
 class Application
 {
@@ -71,7 +47,87 @@ private:
 	Buffer pointBuffer;
 	Buffer indexBuffer;
 	uint32_t indexCount;
+	std::vector<float> pointData;
+	std::vector<uint16_t> indexData;
 };
+
+
+bool loadGeometry(const fs::path& path, std::vector<float>& pointData, std::vector<uint16_t>& indexData) {
+	std::ifstream file(path);
+	if (!file.is_open()) {
+		return false;
+	}
+
+	pointData.clear();
+	indexData.clear();
+
+	enum class  Section {
+		None,
+		Points,
+		Indicies
+	};
+	Section currentSection = Section::None;
+
+	float value;
+	uint16_t index;
+	std::string line;
+	while (!file.eof()) {
+		getline(file, line);
+
+		if (!line.empty() && line.back() == '\r') {
+			line.pop_back();
+		}
+
+		if (line == "[points]") {
+			currentSection = Section::Points;
+		}
+		else if (line == "[indices]") {
+			currentSection = Section::Indicies;
+		}
+		else if (line[0] == '#' || line.empty()) {
+
+		}
+		else if (currentSection == Section::Points) {
+			std::istringstream iss(line);
+
+			for (int i = 0; i < 5; ++i) {
+				iss >> value;
+				pointData.push_back(value);
+			}
+		}
+		else if (currentSection == Section::Indicies) {
+			std::istringstream iss(line);
+
+			for (int i = 0; i < 3; ++i) {
+				iss >> index;
+				indexData.push_back(index);
+			}
+		}
+	}
+	return true;
+}
+
+ShaderModule loadShaderModule(const fs::path& path, Device device) {
+	std::ifstream file(path);
+	if (!file.is_open()) {
+		return nullptr;
+	}
+	file.seekg(0, std::ios::end);
+	size_t size = file.tellg();
+	std::string shaderSource(size, ' ');
+	file.seekg(0);
+	file.read(shaderSource.data(), size);
+
+	ShaderModuleWGSLDescriptor shaderCodeDesc{};
+	shaderCodeDesc.chain.next = nullptr;
+	shaderCodeDesc.chain.sType = SType::ShaderModuleWGSLDescriptor;
+	shaderCodeDesc.code = shaderSource.c_str();
+	ShaderModuleDescriptor shaderDesc{};
+	shaderDesc.hintCount = 0;
+	shaderDesc.hints = nullptr;
+	shaderDesc.nextInChain = &shaderCodeDesc.chain;
+	return device.createShaderModule(shaderDesc);
+}
 
 int main()
 {
@@ -151,7 +207,6 @@ bool Application::Initialize()
 	surfaceConfig.usage = TextureUsage::RenderAttachment;
 	surfaceFormat = surface.getPreferredFormat(adapter);
 	surfaceConfig.format = surfaceFormat;
-
 	surfaceConfig.viewFormatCount = 0;
 	surfaceConfig.viewFormats = nullptr;
 	surfaceConfig.device = device;
@@ -214,8 +269,8 @@ void Application::MainLoop()
 
 	renderPass.setPipeline(renderPipeline);
 
-	renderPass.setVertexBuffer(0, pointBuffer, 0, pointBuffer.getSize());
-	renderPass.setIndexBuffer(indexBuffer, IndexFormat::Uint16, 0, indexBuffer.getSize());
+	renderPass.setVertexBuffer(0, pointBuffer, 0, pointData.size() * sizeof(float));
+	renderPass.setIndexBuffer(indexBuffer, IndexFormat::Uint16, 0, indexData.size() * sizeof(uint16_t));
 
 	renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
 
@@ -277,18 +332,9 @@ TextureView Application::GetNextSurfaceTextureView()
 
 void Application::InitializePipeline()
 {
-	ShaderModuleDescriptor shaderModuleDesc;
-#ifdef WEBGPU_BACKEND_WGPU
-	shaderModuleDesc.hintCount = 0;
-	shaderModuleDesc.hints = nullptr;
-#endif
-
-	ShaderModuleWGSLDescriptor shaderCodeDesc;
-	shaderCodeDesc.chain.next = nullptr;
-	shaderCodeDesc.chain.sType = SType::ShaderModuleWGSLDescriptor;
-	shaderModuleDesc.nextInChain = &shaderCodeDesc.chain;
-	shaderCodeDesc.code = shaderSource;
-	ShaderModule shaderModule = device.createShaderModule(shaderModuleDesc);
+	std::cout << "Creating shader module..." << std::endl;
+	ShaderModule shaderModule = loadShaderModule(RESOURCE_DIR "/shader.wgsl", device);
+	std::cout << "Shader module: " << shaderModule << std::endl;
 
 	RenderPipelineDescriptor renderPipelineDesc;
 
@@ -301,7 +347,7 @@ void Application::InitializePipeline()
 
 	vertexAttribs[1].shaderLocation = 1;
 	vertexAttribs[1].format = VertexFormat::Float32x3;
-	vertexAttribs[1].offset = 2  * sizeof(float);
+	vertexAttribs[1].offset = 2 * sizeof(float);
 
 	vertexBufferLayout.attributeCount = static_cast<uint32_t>(vertexAttribs.size());
 	vertexBufferLayout.attributes = vertexAttribs.data();
@@ -364,33 +410,23 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 	adapter.getLimits(&supportedLimits);
 
 	RequiredLimits requiredLimits = Default;
-
 	requiredLimits.limits.maxVertexAttributes = 2;
 	requiredLimits.limits.maxVertexBuffers = 1;
-	requiredLimits.limits.maxBufferSize = 6 * 5 * sizeof(float);
+	requiredLimits.limits.maxBufferSize = 21 * 5 * sizeof(float);
 	requiredLimits.limits.maxVertexBufferArrayStride = 5 * sizeof(float);
-	requiredLimits.limits.maxInterStageShaderComponents = 3;
 	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
 	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
+	requiredLimits.limits.maxInterStageShaderComponents = 3;
 
 	return requiredLimits;
 }
 
 void Application::InitializeBuffers()
 {
-	std::vector<float> pointData = {
-		-0.5, -0.5,		1.0, 0.0, 0.0,
-		+0.5, -0.5, 	0.0, 1.0, 0.0,
-		+0.5, +0.5, 	0.0, 0.0, 1.0,
-		-0.5, +0.5, 	1.0, 1.0, 0.0
-	};
-
-	std::vector<uint16_t> indexData = {
-		0, 1, 2,
-		0, 2, 3
-	};
-
-	indexCount = static_cast<uint32_t>(indexData.size());
+	bool success = loadGeometry(RESOURCE_DIR "/webgpu.txt", pointData, indexData);
+	if (!success) {
+		std::cerr << "Could not load geometry!" << std::endl;
+	}
 
 	BufferDescriptor bufferDesc;
 
@@ -399,14 +435,17 @@ void Application::InitializeBuffers()
 	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
 	bufferDesc.mappedAtCreation = false;
 	pointBuffer = device.createBuffer(bufferDesc);
-
 	queue.writeBuffer(pointBuffer, 0, pointData.data(), bufferDesc.size);
+
+	indexCount = static_cast<int>(indexData.size());
 
 	bufferDesc.label = "Index Data";
 	bufferDesc.size = indexData.size() * sizeof(uint16_t);
 	bufferDesc.size = (bufferDesc.size + 3) & ~3;
 	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Index;
+	bufferDesc.mappedAtCreation = false;
 	indexBuffer = device.createBuffer(bufferDesc);
-
 	queue.writeBuffer(indexBuffer, 0, indexData.data(), bufferDesc.size);
 }
+
+
