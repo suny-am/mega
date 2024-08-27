@@ -8,15 +8,21 @@ struct VertexOutput {
 	@location(0) color: vec3f,
 };
 
-@group(0) @binding(0) var<uniform> uTime: f32;
+
+struct SharedUniforms {
+    color: vec4f,
+    time: f32,
+
+}
+@group(0) @binding(0) var<uniform> uSharedUniforms: SharedUniforms;
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    let ratio = 640.0 / 480.0;
-
     var offset = vec2f(-0.6875, -0.463);
-    offset += 0.3 * vec2f(cos(uTime), sin(uTime));
+    let ratio = 640.0 / 480.0;
+    let time = uSharedUniforms.time;
+    offset += 0.3 * vec2f(cos(time), sin(time));
     out.position = vec4f(in.position.x + offset.x, (in.position.y + offset.y) * ratio, 0.0, 1.0);
     out.color = in.color;
     return out;
@@ -24,6 +30,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    let linear_color = pow(in.color, vec3f(2.2));
-    return vec4f(linear_color, 1.0);
+    let color = in.color * uSharedUniforms.color.rgb;
+    let linear_color = pow(color, vec3f(2.2)); // correct color space
+    return vec4f(linear_color, uSharedUniforms.color.a);
 }

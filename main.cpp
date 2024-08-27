@@ -8,6 +8,7 @@
 #include <emscripten.h>
 #endif // __EMSCRIPTEN__
 
+#include <array>
 #include <iostream>
 #include <cassert>
 #include <vector>
@@ -15,9 +16,18 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <cstddef>
 
 using namespace wgpu;
 namespace fs = std::filesystem;
+
+struct SharedUniforms {
+	std::array<float, 4> color;
+	float time;
+	float _pad[3];
+};
+// Calidate byte alignment in compile time
+static_assert(sizeof(SharedUniforms) % 16 == 0);
 
 class Application
 {
@@ -51,6 +61,7 @@ private:
 	std::vector<float> pointData;
 	std::vector<uint16_t> indexData;
 	BindGroup bindGroup;
+	SharedUniforms uniforms;
 };
 
 
@@ -246,8 +257,8 @@ void Application::MainLoop()
 	if (!targetView)
 		return;
 
-	float t = static_cast<float>(glfwGetTime());
-	queue.writeBuffer(uniformBuffer, 0, &t, sizeof(float));
+	uniforms.time = static_cast<float>(glfwGetTime());
+	queue.writeBuffer(uniformBuffer, offsetof(SharedUniforms, time), &uniforms.time, sizeof(SharedUniforms::time));
 
 	CommandEncoderDescriptor encoderDesc = {};
 	encoderDesc.label = "My command encoder";
@@ -405,9 +416,9 @@ void Application::InitializePipeline()
 
 	BindGroupLayoutEntry bindingLayout = Default;
 	bindingLayout.binding = 0;
-	bindingLayout.visibility = ShaderStage::Vertex;
+	bindingLayout.visibility = ShaderStage::Vertex | ShaderStage::Fragment;
 	bindingLayout.buffer.type = BufferBindingType::Uniform;
-	bindingLayout.buffer.minBindingSize = sizeof(float);
+	bindingLayout.buffer.minBindingSize = sizeof(SharedUniforms);
 
 	BindGroupLayoutDescriptor bindGroupLayoutDesc;
 	bindGroupLayoutDesc.entryCount = 1;
@@ -427,7 +438,7 @@ void Application::InitializePipeline()
 	binding.binding = 0;
 	binding.buffer = uniformBuffer;
 	binding.offset = 0;
-	binding.size = sizeof(float);
+	binding.size = sizeof(SharedUniforms);
 
 	BindGroupDescriptor bindGroupDesc;
 	bindGroupDesc.layout = bindGroupLayout;
@@ -486,14 +497,14 @@ void Application::InitializeBuffers()
 
 
 	bufferDesc.label = "Uniform";
-	bufferDesc.size = sizeof(float);
+	bufferDesc.size = sizeof(SharedUniforms);
 	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
 	bufferDesc.mappedAtCreation = false;
 	uniformBuffer = device.createBuffer(bufferDesc);
-	float currentTime = 1.0f;
-	queue.writeBuffer(uniformBuffer, 0, &currentTime, sizeof(float));
-	std::cout << "uniform buffer: " << uniformBuffer << std::endl;
 
+	uniforms.time = 1.0f;
+	uniforms.color = { 0.0f, 1.0f, 0.4f, 1.0f };
+	queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(SharedUniforms));
 }
 
 
