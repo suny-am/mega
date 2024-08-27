@@ -65,7 +65,7 @@ private:
 };
 
 
-bool loadGeometry(const fs::path& path, std::vector<float>& pointData, std::vector<uint16_t>& indexData) {
+bool loadGeometry(const fs::path& path, std::vector<float>& pointData, std::vector<uint16_t>& indexData, int dimensions) {
 	std::ifstream file(path);
 	if (!file.is_open()) {
 		return false;
@@ -103,7 +103,7 @@ bool loadGeometry(const fs::path& path, std::vector<float>& pointData, std::vect
 		else if (currentSection == Section::Points) {
 			std::istringstream iss(line);
 
-			for (int i = 0; i < 5; ++i) {
+			for (int i = 0; i < dimensions + 3; ++i) {
 				iss >> value;
 				pointData.push_back(value);
 			}
@@ -359,17 +359,17 @@ void Application::InitializePipeline()
 	std::vector<VertexAttribute> vertexAttribs(2);
 
 	vertexAttribs[0].shaderLocation = 0;
-	vertexAttribs[0].format = VertexFormat::Float32x2;
+	vertexAttribs[0].format = VertexFormat::Float32x3; // 3 dimensions
 	vertexAttribs[0].offset = 0;
 
 	vertexAttribs[1].shaderLocation = 1;
 	vertexAttribs[1].format = VertexFormat::Float32x3;
-	vertexAttribs[1].offset = 2 * sizeof(float);
+	vertexAttribs[1].offset = 3 * sizeof(float); // 3 dimensions
 
 	vertexBufferLayout.attributeCount = static_cast<uint32_t>(vertexAttribs.size());
 	vertexBufferLayout.attributes = vertexAttribs.data();
 
-	vertexBufferLayout.arrayStride = 5 * sizeof(float);
+	vertexBufferLayout.arrayStride = 6 * sizeof(float);
 	vertexBufferLayout.stepMode = VertexStepMode::Vertex;
 
 	renderPipelineDesc.vertex.buffers = &vertexBufferLayout;
@@ -458,7 +458,7 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 	requiredLimits.limits.maxVertexAttributes = 2;
 	requiredLimits.limits.maxVertexBuffers = 1;
 	requiredLimits.limits.maxBufferSize = 21 * 5 * sizeof(float);
-	requiredLimits.limits.maxVertexBufferArrayStride = 5 * sizeof(float);
+	requiredLimits.limits.maxVertexBufferArrayStride = 6 * sizeof(float);
 	requiredLimits.limits.maxBindGroups = 1;
 	requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
 	requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4;
@@ -471,7 +471,7 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 
 void Application::InitializeBuffers()
 {
-	bool success = loadGeometry(RESOURCE_DIR "/webgpu.txt", pointData, indexData);
+	bool success = loadGeometry(RESOURCE_DIR "/pyramid.txt", pointData, indexData, 3);
 	if (!success) {
 		std::cerr << "Could not load geometry!" << std::endl;
 	}
