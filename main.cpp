@@ -46,9 +46,11 @@ private:
 	RenderPipeline renderPipeline;
 	Buffer pointBuffer;
 	Buffer indexBuffer;
+	Buffer uniformBuffer;
 	uint32_t indexCount;
 	std::vector<float> pointData;
 	std::vector<uint16_t> indexData;
+	BindGroup bindGroup;
 };
 
 
@@ -217,8 +219,8 @@ bool Application::Initialize()
 
 	adapter.release();
 
-	InitializePipeline();
 	InitializeBuffers();
+	InitializePipeline();
 
 	return true;
 }
@@ -243,6 +245,9 @@ void Application::MainLoop()
 	TextureView targetView = GetNextSurfaceTextureView();
 	if (!targetView)
 		return;
+
+	float t = static_cast<float>(glfwGetTime());
+	queue.writeBuffer(uniformBuffer, 0, &t, sizeof(float));
 
 	CommandEncoderDescriptor encoderDesc = {};
 	encoderDesc.label = "My command encoder";
@@ -271,6 +276,7 @@ void Application::MainLoop()
 
 	renderPass.setVertexBuffer(0, pointBuffer, 0, pointData.size() * sizeof(float));
 	renderPass.setIndexBuffer(indexBuffer, IndexFormat::Uint16, 0, indexData.size() * sizeof(uint16_t));
+	renderPass.setBindGroup(0, bindGroup, 0, nullptr);
 
 	renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
 
@@ -397,9 +403,37 @@ void Application::InitializePipeline()
 	renderPipelineDesc.multisample.mask = ~0u;
 	renderPipelineDesc.multisample.alphaToCoverageEnabled = false;
 
-	renderPipelineDesc.layout = nullptr;
+	BindGroupLayoutEntry bindingLayout = Default;
+	bindingLayout.binding = 0;
+	bindingLayout.visibility = ShaderStage::Vertex;
+	bindingLayout.buffer.type = BufferBindingType::Uniform;
+	bindingLayout.buffer.minBindingSize = sizeof(float);
+
+	BindGroupLayoutDescriptor bindGroupLayoutDesc;
+	bindGroupLayoutDesc.entryCount = 1;
+	bindGroupLayoutDesc.entries = &bindingLayout;
+	BindGroupLayout bindGroupLayout = device.createBindGroupLayout(bindGroupLayoutDesc);
+
+	PipelineLayoutDescriptor layoutDesc;
+	layoutDesc.bindGroupLayoutCount = 1;
+	layoutDesc.bindGroupLayouts = (WGPUBindGroupLayout*)&bindGroupLayout;
+	PipelineLayout layout = device.createPipelineLayout(layoutDesc);
+
+	renderPipelineDesc.layout = layout;
 
 	renderPipeline = device.createRenderPipeline(renderPipelineDesc);
+
+	BindGroupEntry binding;
+	binding.binding = 0;
+	binding.buffer = uniformBuffer;
+	binding.offset = 0;
+	binding.size = sizeof(float);
+
+	BindGroupDescriptor bindGroupDesc;
+	bindGroupDesc.layout = bindGroupLayout;
+	bindGroupDesc.entryCount = bindGroupLayoutDesc.entryCount;
+	bindGroupDesc.entries = &binding;
+	bindGroup = device.createBindGroup(bindGroupDesc);
 
 	shaderModule.release();
 }
@@ -414,6 +448,9 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 	requiredLimits.limits.maxVertexBuffers = 1;
 	requiredLimits.limits.maxBufferSize = 21 * 5 * sizeof(float);
 	requiredLimits.limits.maxVertexBufferArrayStride = 5 * sizeof(float);
+	requiredLimits.limits.maxBindGroups = 1;
+	requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
+	requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4;
 	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
 	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
 	requiredLimits.limits.maxInterStageShaderComponents = 3;
@@ -446,6 +483,17 @@ void Application::InitializeBuffers()
 	bufferDesc.mappedAtCreation = false;
 	indexBuffer = device.createBuffer(bufferDesc);
 	queue.writeBuffer(indexBuffer, 0, indexData.data(), bufferDesc.size);
+
+
+	bufferDesc.label = "Uniform";
+	bufferDesc.size = sizeof(float);
+	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
+	bufferDesc.mappedAtCreation = false;
+	uniformBuffer = device.createBuffer(bufferDesc);
+	float currentTime = 1.0f;
+	queue.writeBuffer(uniformBuffer, 0, &currentTime, sizeof(float));
+	std::cout << "uniform buffer: " << uniformBuffer << std::endl;
+
 }
 
 
