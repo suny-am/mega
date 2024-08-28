@@ -62,6 +62,8 @@ private:
 	std::vector<uint16_t> indexData;
 	BindGroup bindGroup;
 	SharedUniforms uniforms;
+	TextureView depthTextureView;
+	Texture depthTexture;
 };
 
 
@@ -238,6 +240,9 @@ bool Application::Initialize()
 
 void Application::Terminate()
 {
+	depthTextureView.release();
+	depthTexture.destroy();
+	depthTexture.release();
 	pointBuffer.release();
 	indexBuffer.release();
 	renderPipeline.release();
@@ -278,7 +283,35 @@ void Application::MainLoop()
 
 	renderPassDesc.colorAttachmentCount = 1;
 	renderPassDesc.colorAttachments = &renderPassColorAttachment;
-	renderPassDesc.depthStencilAttachment = nullptr;
+
+	RenderPassDepthStencilAttachment depthStencilAttachment;
+
+	// 1.0f == default value for the depth buffer (furthest value)
+	depthStencilAttachment.view = depthTextureView;
+	depthStencilAttachment.depthClearValue = 1.0f;
+	// Comparable settings to Color Attachments
+	depthStencilAttachment.depthLoadOp = LoadOp::Clear;
+	depthStencilAttachment.depthStoreOp = StoreOp::Store;
+	// Possible to disable writing to depth buffer globally via this attribute
+	depthStencilAttachment.depthReadOnly = false;
+
+	// Not used but required
+	depthStencilAttachment.stencilClearValue = 0;
+	depthStencilAttachment.stencilReadOnly = false;
+#ifdef WEBGPU_BACKEND_DAWN
+	constexpr auto NanNf = std::nunmeric_limits<float>::quiet_NaN();
+	depthStencilAttachment.clearDepth = NaNf;
+	depthStencilAttachment.stencilLoadOp = LoadOp::Undefined;
+	depthStencilAttachment.stencilStoreOp = StoreOp::Undefined;
+#else 
+	depthStencilAttachment.stencilLoadOp = LoadOp::Clear;
+	depthStencilAttachment.stencilStoreOp = StoreOp::Store;
+#endif
+	depthStencilAttachment.stencilLoadOp = LoadOp::Clear;
+	depthStencilAttachment.stencilStoreOp = StoreOp::Store;
+
+
+	renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
 	renderPassDesc.timestampWrites = nullptr;
 
 	RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
@@ -408,7 +441,36 @@ void Application::InitializePipeline()
 	fragmentState.targets = &colorTargetState;
 	renderPipelineDesc.fragment = &fragmentState;
 
-	renderPipelineDesc.depthStencil = nullptr;
+	DepthStencilState depthStencilState = Default;
+	depthStencilState.depthCompare = CompareFunction::Less;
+	depthStencilState.depthWriteEnabled = true;
+	TextureFormat depthTextureFormat = TextureFormat::Depth24Plus;
+	depthStencilState.format = depthTextureFormat;
+	depthStencilState.stencilReadMask = 0;
+	depthStencilState.stencilWriteMask = 0;
+
+	TextureDescriptor depthTextureDesc;
+	depthTextureDesc.dimension = TextureDimension::_2D;
+	depthTextureDesc.format = depthTextureFormat;
+	depthTextureDesc.mipLevelCount = 1;
+	depthTextureDesc.sampleCount = 1;
+	depthTextureDesc.size = { 640, 480, 1 };
+	depthTextureDesc.usage = TextureUsage::RenderAttachment;
+	depthTextureDesc.viewFormatCount = 1;
+	depthTextureDesc.viewFormats = (WGPUTextureFormat*)&depthTextureFormat;
+	depthTexture = device.createTexture(depthTextureDesc);
+
+	TextureViewDescriptor depthTextureViewDesc;
+	depthTextureViewDesc.aspect = TextureAspect::DepthOnly;
+	depthTextureViewDesc.baseArrayLayer = 0;
+	depthTextureViewDesc.arrayLayerCount = 1;
+	depthTextureViewDesc.mipLevelCount = 1;
+	depthTextureViewDesc.dimension = TextureViewDimension::_2D;
+	depthTextureViewDesc.format = depthTextureFormat;
+	depthTextureView = depthTexture.createView(depthTextureViewDesc);
+
+
+	renderPipelineDesc.depthStencil = &depthStencilState;
 
 	renderPipelineDesc.multisample.count = 1;
 	renderPipelineDesc.multisample.mask = ~0u;
@@ -465,6 +527,9 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
 	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
 	requiredLimits.limits.maxInterStageShaderComponents = 3;
+	requiredLimits.limits.maxTextureDimension1D = 480;
+	requiredLimits.limits.maxTextureDimension2D = 640;
+	requiredLimits.limits.maxTextureArrayLayers = 1;
 
 	return requiredLimits;
 }
