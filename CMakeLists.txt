@@ -19,12 +19,18 @@ add_subdirectory(webgpu)
 
 add_executable(App main.cpp)
 
+target_include_directories(App PRIVATE .)
+
 if(DEV_MODE)
   target_compile_definitions(
     App PRIVATE RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources")
 else()
   target_compile_definitions(App PRIVATE RESOURCE_DIR="./resources")
 endif()
+
+target_compile_definitions(
+  App PRIVATE GLM_FORCE_DEPTH_ZERO_TONE=1 GLM_FORCE_LEFT_HANDED=1
+)
 
 target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu)
 

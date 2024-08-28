@@ -1,5 +1,9 @@
 #define WEBGPU_CPP_IMPLEMENTATION
+// WGPU C++ wrapper
 #include "webgpu/webgpu.hpp"
+// GLM
+#include "glm/glm.hpp"
+#include <glm/ext.hpp>
 
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
@@ -7,6 +11,7 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif // __EMSCRIPTEN__
+
 
 #include <array>
 #include <iostream>
@@ -21,8 +26,15 @@
 using namespace wgpu;
 namespace fs = std::filesystem;
 
+using glm::mat4x4;
+using glm::vec4;
+using glm::vec3;
+
 struct SharedUniforms {
-	std::array<float, 4> color;
+	mat4x4 projectionMatrix;
+	mat4x4 viewMatrix;
+	mat4x4 modelMatrix;
+	vec4 color;
 	float time;
 	float _pad[3];
 };
@@ -64,6 +76,11 @@ private:
 	SharedUniforms uniforms;
 	TextureView depthTextureView;
 	Texture depthTexture;
+	mat4x4 S;
+	mat4x4 T1;
+	mat4x4 T2;
+	mat4x4 R1;
+	mat4x4 R2;
 };
 
 
@@ -264,6 +281,11 @@ void Application::MainLoop()
 
 	uniforms.time = static_cast<float>(glfwGetTime());
 	queue.writeBuffer(uniformBuffer, offsetof(SharedUniforms, time), &uniforms.time, sizeof(SharedUniforms::time));
+
+	float angle1 = uniforms.time;
+	R1 = glm::rotate(mat4x4(1.0), angle1, vec3(0.0, 0.0, 1.0));
+	uniforms.modelMatrix = R1 * T1 * S;
+	queue.writeBuffer(uniformBuffer, offsetof(SharedUniforms, modelMatrix), &uniforms.modelMatrix, sizeof(SharedUniforms::modelMatrix));
 
 	CommandEncoderDescriptor encoderDesc = {};
 	encoderDesc.label = "My command encoder";
@@ -523,7 +545,7 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 	requiredLimits.limits.maxVertexBufferArrayStride = 6 * sizeof(float);
 	requiredLimits.limits.maxBindGroups = 1;
 	requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
-	requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4;
+	requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
 	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
 	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
 	requiredLimits.limits.maxInterStageShaderComponents = 3;
@@ -569,6 +591,29 @@ void Application::InitializeBuffers()
 
 	uniforms.time = 1.0f;
 	uniforms.color = { 0.0f, 1.0f, 0.4f, 1.0f };
+
+	constexpr float PI = 3.14159265358979323846f;
+
+	float angle1 = (float)glfwGetTime();
+	float angle2 = 3.0 * PI / 4.0;
+	vec3 focalPoint = vec3(0.0, 0.0, -2.0);
+
+	S = glm::scale(mat4x4(1.0), vec3(0.3f));
+	T1 = glm::translate(mat4x4(1.0), vec3(0.5, 0.0, 0.0));
+	R1 = glm::rotate(mat4x4(1.0), angle1, vec3(0.5, 0.0, 0.0));
+	uniforms.modelMatrix = R1 * T1 * S;
+
+	R2 = glm::rotate(mat4x4(1.0), -angle2, vec3(1.0, 0.0, 0.0));
+	T2 = glm::translate(mat4x4(1.0), -focalPoint);
+	uniforms.viewMatrix = T2 * R2;
+
+	float near = 0.001f;
+	float far = 100.0f;
+	float ratio = 640.0f / 480.0f;
+	float focalLength = 2.0;
+	float fov = 2 * glm::atan(1 / focalLength);
+	uniforms.projectionMatrix = glm::perspective(fov, ratio, near, far);
+
 	queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(SharedUniforms));
 }
 
