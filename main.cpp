@@ -4,6 +4,9 @@
 // GLM
 #include "glm/glm.hpp"
 #include <glm/ext.hpp>
+// TinyOBJLoader
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
 
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
@@ -29,6 +32,10 @@ namespace fs = std::filesystem;
 using glm::mat4x4;
 using glm::vec4;
 using glm::vec3;
+using std::vector;
+using std::string;
+using std::cout;
+using std::endl;
 
 constexpr float PI = 3.14159265358979323846f;
 
@@ -75,12 +82,10 @@ private:
 	std::unique_ptr<ErrorCallback> uncapturedErrorCallbackHandle;
 	TextureFormat surfaceFormat = TextureFormat::Undefined;
 	RenderPipeline renderPipeline;
-	Buffer pointBuffer;
-	Buffer indexBuffer;
+	vector<VertexAttributes> vertexData;
+	Buffer vertexBuffer;
 	Buffer uniformBuffer;
-	uint32_t indexCount;
-	std::vector<float> pointData;
-	std::vector<uint16_t> indexData;
+	int indexCount;
 	BindGroup bindGroup;
 	SharedUniforms uniforms;
 	TextureView depthTextureView;
@@ -92,60 +97,60 @@ private:
 	mat4x4 R2;
 };
 
+bool loadGeometryFromObj(const fs::path& path, vector<VertexAttributes>& vertexData) {
+	tinyobj::attrib_t attrib;
+	vector<tinyobj::shape_t> shapes;
+	vector<tinyobj::material_t> materials;
 
-bool loadGeometry(const fs::path& path, std::vector<float>& pointData, std::vector<uint16_t>& indexData, int dimensions) {
-	std::ifstream file(path);
-	if (!file.is_open()) {
+	string warn;
+	string err;
+
+	bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, path.string().c_str());
+
+	if (!warn.empty()) {
+		cout << warn << endl;
+	}
+
+	if (!err.empty()) {
+		cout << err << endl;
+	}
+
+	if (!ret) {
 		return false;
 	}
 
-	pointData.clear();
-	indexData.clear();
+	vertexData.clear();
+	for (const auto& shape : shapes) {
+		size_t offset = vertexData.size();
+		vertexData.resize(offset + shape.mesh.indices.size());
+		for (size_t i = 0; i < shape.mesh.indices.size(); ++i) {
 
-	enum class  Section {
-		None,
-		Points,
-		Indicies
-	};
-	Section currentSection = Section::None;
+			const tinyobj::index_t& idx = shape.mesh.indices[i];
 
-	float value;
-	uint16_t index;
-	std::string line;
-	while (!file.eof()) {
-		getline(file, line);
+			vertexData[offset + i].position = {
+				// switch indices around to reorient up-axis around Z
+				attrib.vertices[3 * idx.vertex_index + 0],
+				-attrib.vertices[3 * idx.vertex_index + 2],
+				attrib.vertices[3 * idx.vertex_index + 1],
+			};
 
-		if (!line.empty() && line.back() == '\r') {
-			line.pop_back();
-		}
+			vertexData[offset + i].normal = {
+				// switch indices around to reorient up-axis around Z
+				attrib.normals[3 * idx.normal_index + 0],
+				-attrib.normals[3 * idx.normal_index + 2],
+				attrib.normals[3 * idx.normal_index + 1],
+			};
 
-		if (line == "[points]") {
-			currentSection = Section::Points;
-		}
-		else if (line == "[indices]") {
-			currentSection = Section::Indicies;
-		}
-		else if (line[0] == '#' || line.empty()) {
-
-		}
-		else if (currentSection == Section::Points) {
-			std::istringstream iss(line);
-
-			for (int i = 0; i < dimensions + 3; ++i) {
-				iss >> value;
-				pointData.push_back(value);
-			}
-		}
-		else if (currentSection == Section::Indicies) {
-			std::istringstream iss(line);
-
-			for (int i = 0; i < 3; ++i) {
-				iss >> index;
-				indexData.push_back(index);
-			}
+			vertexData[offset + i].color = {
+				attrib.colors[3 * idx.vertex_index + 0],
+				attrib.colors[3 * idx.vertex_index + 1],
+				attrib.colors[3 * idx.vertex_index + 2]
+			};
 		}
 	}
+
 	return true;
+
 }
 
 ShaderModule loadShaderModule(const fs::path& path, Device device) {
@@ -155,7 +160,7 @@ ShaderModule loadShaderModule(const fs::path& path, Device device) {
 	}
 	file.seekg(0, std::ios::end);
 	size_t size = file.tellg();
-	std::string shaderSource(size, ' ');
+	string shaderSource(size, ' ');
 	file.seekg(0);
 	file.read(shaderSource.data(), size);
 
@@ -184,7 +189,7 @@ int main()
 		{
 			Application* pApp = reinterpret_cast<Application*>(arg);
 			pApp->MainLoop();
-	};
+		};
 	emscripten_set_main_loop_arg(callback, &app, 0, true);
 #else  // __EMSCRIPTEN__
 	while (app.IsRunning())
@@ -201,20 +206,20 @@ bool Application::Initialize()
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-	window = glfwCreateWindow(640, 480, "Learn WebGPU", nullptr, nullptr);
+	window = glfwCreateWindow(1280, 960, "Learn WebGPU", nullptr, nullptr);
 
 	Instance instance = wgpuCreateInstance(nullptr);
 
-	std::cout << "Requesting adapter..." << std::endl;
+	cout << "Requesting adapter..." << endl;;
 	surface = glfwGetWGPUSurface(instance, window);
 	RequestAdapterOptions adapterOpts = {};
 	adapterOpts.compatibleSurface = surface;
 	Adapter adapter = instance.requestAdapter(adapterOpts);
-	std::cout << "Got adapter: " << adapter << std::endl;
+	cout << "Got adapter: " << adapter << endl;;
 
 	instance.release();
 
-	std::cout << "Requesting device..." << std::endl;
+	cout << "Requesting device..." << endl;;
 	DeviceDescriptor deviceDesc = {};
 	deviceDesc.label = "My Device";
 	deviceDesc.requiredFeatureCount = 0;
@@ -223,28 +228,28 @@ bool Application::Initialize()
 	deviceDesc.defaultQueue.label = "The default queue";
 	deviceDesc.deviceLostCallback = [](WGPUDeviceLostReason reason, char const* message, void* /* pUserData */)
 		{
-			std::cout << "Device lost: reason " << reason;
+			cout << "Device lost: reason " << reason;
 			if (message)
-				std::cout << " (" << message << ")";
-			std::cout << std::endl;
+				cout << " (" << message << ")";
+			cout << endl;;
 		};
 	RequiredLimits requiredLimits = GetRequiredLimits(adapter);
 	deviceDesc.requiredLimits = &requiredLimits;
 	device = adapter.requestDevice(deviceDesc);
-	std::cout << "Got device: " << device << std::endl;
+	cout << "Got device: " << device << endl;;
 
 	uncapturedErrorCallbackHandle = device.setUncapturedErrorCallback([](ErrorType type, char const* message)
 																	  {
-																		  std::cout << "Uncaptured device error: type " << type;
-																		  if (message) std::cout << " (" << message << ")";
-																		  std::cout << std::endl; });
+																		  cout << "Uncaptured device error: type " << type;
+																		  if (message) cout << " (" << message << ")";
+																		  cout << endl;; });
 
 	queue = device.getQueue();
 
 	SurfaceConfiguration surfaceConfig = {};
 
-	surfaceConfig.width = 640;
-	surfaceConfig.height = 480;
+	surfaceConfig.width = 1280;
+	surfaceConfig.height = 960;
 	surfaceConfig.usage = TextureUsage::RenderAttachment;
 	surfaceFormat = surface.getPreferredFormat(adapter);
 	surfaceConfig.format = surfaceFormat;
@@ -269,8 +274,7 @@ void Application::Terminate()
 	depthTextureView.release();
 	depthTexture.destroy();
 	depthTexture.release();
-	pointBuffer.release();
-	indexBuffer.release();
+	vertexBuffer.release();
 	renderPipeline.release();
 	surface.unconfigure();
 	queue.release();
@@ -349,11 +353,10 @@ void Application::MainLoop()
 
 	renderPass.setPipeline(renderPipeline);
 
-	renderPass.setVertexBuffer(0, pointBuffer, 0, pointData.size() * sizeof(float));
-	renderPass.setIndexBuffer(indexBuffer, IndexFormat::Uint16, 0, indexData.size() * sizeof(uint16_t));
+	renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexData.size() * sizeof(VertexAttributes));
 	renderPass.setBindGroup(0, bindGroup, 0, nullptr);
 
-	renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
+	renderPass.draw(indexCount, 1, 0, 0);
 
 	renderPass.end();
 	renderPass.release();
@@ -363,11 +366,8 @@ void Application::MainLoop()
 	CommandBuffer command = encoder.finish(cmdBufferDescriptor);
 	encoder.release();
 
-	std::cout << "Submitting command..." << std::endl;
 	queue.submit(1, &command);
 	command.release();
-	std::cout << "Command submitted." << std::endl;
-
 	targetView.release();
 #ifndef __EMSCRIPTEN__
 	surface.present();
@@ -413,14 +413,14 @@ TextureView Application::GetNextSurfaceTextureView()
 
 void Application::InitializePipeline()
 {
-	std::cout << "Creating shader module..." << std::endl;
+	cout << "Creating shader module..." << endl;;
 	ShaderModule shaderModule = loadShaderModule(RESOURCE_DIR "/shader.wgsl", device);
-	std::cout << "Shader module: " << shaderModule << std::endl;
+	cout << "Shader module: " << shaderModule << endl;;
 
 	RenderPipelineDescriptor renderPipelineDesc;
 
 	VertexBufferLayout vertexBufferLayout;
-	std::vector<VertexAttribute> vertexAttribs(3); // position + normal + color
+	vector<VertexAttribute> vertexAttribs(3); // position + normal + color
 
 	vertexAttribs[0].shaderLocation = 0;
 	vertexAttribs[0].format = VertexFormat::Float32x3; //  xyz
@@ -489,7 +489,7 @@ void Application::InitializePipeline()
 	depthTextureDesc.format = depthTextureFormat;
 	depthTextureDesc.mipLevelCount = 1;
 	depthTextureDesc.sampleCount = 1;
-	depthTextureDesc.size = { 640, 480, 1 };
+	depthTextureDesc.size = { 1280, 960, 1 };
 	depthTextureDesc.usage = TextureUsage::RenderAttachment;
 	depthTextureDesc.viewFormatCount = 1;
 	depthTextureDesc.viewFormats = (WGPUTextureFormat*)&depthTextureFormat;
@@ -554,7 +554,7 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 	RequiredLimits requiredLimits = Default;
 	requiredLimits.limits.maxVertexAttributes = 3;
 	requiredLimits.limits.maxVertexBuffers = 1;
-	requiredLimits.limits.maxBufferSize = 16 * sizeof(VertexAttributes);
+	requiredLimits.limits.maxBufferSize = 500000 * sizeof(VertexAttributes);
 	requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
 	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
 	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
@@ -562,8 +562,8 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 	requiredLimits.limits.maxBindGroups = 1;
 	requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
 	requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
-	requiredLimits.limits.maxTextureDimension1D = 480;
-	requiredLimits.limits.maxTextureDimension2D = 640;
+	requiredLimits.limits.maxTextureDimension1D = 960;
+	requiredLimits.limits.maxTextureDimension2D = 1280;
 	requiredLimits.limits.maxTextureArrayLayers = 1;
 
 	return requiredLimits;
@@ -571,30 +571,21 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 
 void Application::InitializeBuffers()
 {
-	bool success = loadGeometry(RESOURCE_DIR "/pyramid.txt", pointData, indexData, 6); // position.xyz + normal.xyz
+	bool success = loadGeometryFromObj(RESOURCE_DIR "/mammoth.obj", vertexData);
 	if (!success) {
-		std::cerr << "Could not load geometry!" << std::endl;
+		std::cerr << "Could not load geometry!" << endl;;
 	}
 
 	BufferDescriptor bufferDesc;
 
-	bufferDesc.label = "Position Data";
-	bufferDesc.size = pointData.size() * sizeof(float);
+	bufferDesc.label = "Vertex Data";
+	bufferDesc.size = vertexData.size() * sizeof(VertexAttributes);
 	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
 	bufferDesc.mappedAtCreation = false;
-	pointBuffer = device.createBuffer(bufferDesc);
-	queue.writeBuffer(pointBuffer, 0, pointData.data(), bufferDesc.size);
+	vertexBuffer = device.createBuffer(bufferDesc);
+	queue.writeBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
 
-	indexCount = static_cast<int>(indexData.size());
-
-	bufferDesc.label = "Index Data";
-	bufferDesc.size = indexData.size() * sizeof(uint16_t);
-	bufferDesc.size = (bufferDesc.size + 3) & ~3;
-	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Index;
-	bufferDesc.mappedAtCreation = false;
-	indexBuffer = device.createBuffer(bufferDesc);
-	queue.writeBuffer(indexBuffer, 0, indexData.data(), bufferDesc.size);
-
+	indexCount = static_cast<int>(vertexData.size());
 
 	bufferDesc.label = "Uniform";
 	bufferDesc.size = sizeof(SharedUniforms);
@@ -607,10 +598,10 @@ void Application::InitializeBuffers()
 
 	float angle1 = (float)glfwGetTime();
 	float angle2 = 3.0 * PI / 4.0;
-	vec3 focalPoint = vec3(0.0, 0.0, -2.0);
+	vec3 focalPoint = vec3(0.0, 0.0, -1.0);
 
 	S = glm::scale(mat4x4(1.0), vec3(0.3f));
-	T1 = glm::translate(mat4x4(1.0), vec3(0.5, 0.0, 0.0));
+	T1 = mat4x4(1.0);
 	R1 = glm::rotate(mat4x4(1.0), angle1, vec3(0.5, 0.0, 0.0));
 	uniforms.modelMatrix = R1 * T1 * S;
 
@@ -620,7 +611,7 @@ void Application::InitializeBuffers()
 
 	float near = 0.001f;
 	float far = 100.0f;
-	float ratio = 640.0f / 480.0f;
+	float ratio = 1280.0f / 960.0f;
 	float focalLength = 2.0;
 	float fov = 2 * glm::atan(1 / focalLength);
 	uniforms.projectionMatrix = glm::perspective(fov, ratio, near, far);
