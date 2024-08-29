@@ -30,6 +30,8 @@ using glm::mat4x4;
 using glm::vec4;
 using glm::vec3;
 
+constexpr float PI = 3.14159265358979323846f;
+
 struct SharedUniforms {
 	mat4x4 projectionMatrix;
 	mat4x4 viewMatrix;
@@ -38,7 +40,14 @@ struct SharedUniforms {
 	float time;
 	float _pad[3];
 };
-// Calidate byte alignment in compile time
+
+struct VertexAttributes {
+	vec3 position;
+	vec3 normal;
+	vec3 color;
+};
+
+// Validate byte alignment in compile time
 static_assert(sizeof(SharedUniforms) % 16 == 0);
 
 class Application
@@ -175,7 +184,7 @@ int main()
 		{
 			Application* pApp = reinterpret_cast<Application*>(arg);
 			pApp->MainLoop();
-		};
+	};
 	emscripten_set_main_loop_arg(callback, &app, 0, true);
 #else  // __EMSCRIPTEN__
 	while (app.IsRunning())
@@ -411,20 +420,24 @@ void Application::InitializePipeline()
 	RenderPipelineDescriptor renderPipelineDesc;
 
 	VertexBufferLayout vertexBufferLayout;
-	std::vector<VertexAttribute> vertexAttribs(2);
+	std::vector<VertexAttribute> vertexAttribs(3); // position + normal + color
 
 	vertexAttribs[0].shaderLocation = 0;
-	vertexAttribs[0].format = VertexFormat::Float32x3; // 3 dimensions
-	vertexAttribs[0].offset = 0;
+	vertexAttribs[0].format = VertexFormat::Float32x3; //  xyz
+	vertexAttribs[0].offset = offsetof(VertexAttributes, position);
 
 	vertexAttribs[1].shaderLocation = 1;
 	vertexAttribs[1].format = VertexFormat::Float32x3;
-	vertexAttribs[1].offset = 3 * sizeof(float); // 3 dimensions
+	vertexAttribs[1].offset = offsetof(VertexAttributes, normal);
+
+	vertexAttribs[2].shaderLocation = 2;
+	vertexAttribs[2].format = VertexFormat::Float32x3;
+	vertexAttribs[2].offset = offsetof(VertexAttributes, color);
 
 	vertexBufferLayout.attributeCount = static_cast<uint32_t>(vertexAttribs.size());
 	vertexBufferLayout.attributes = vertexAttribs.data();
 
-	vertexBufferLayout.arrayStride = 6 * sizeof(float);
+	vertexBufferLayout.arrayStride = sizeof(VertexAttributes);
 	vertexBufferLayout.stepMode = VertexStepMode::Vertex;
 
 	renderPipelineDesc.vertex.buffers = &vertexBufferLayout;
@@ -539,16 +552,16 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 	adapter.getLimits(&supportedLimits);
 
 	RequiredLimits requiredLimits = Default;
-	requiredLimits.limits.maxVertexAttributes = 2;
+	requiredLimits.limits.maxVertexAttributes = 3;
 	requiredLimits.limits.maxVertexBuffers = 1;
-	requiredLimits.limits.maxBufferSize = 21 * 5 * sizeof(float);
-	requiredLimits.limits.maxVertexBufferArrayStride = 6 * sizeof(float);
+	requiredLimits.limits.maxBufferSize = 16 * sizeof(VertexAttributes);
+	requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
+	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
+	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
+	requiredLimits.limits.maxInterStageShaderComponents = 6; // color.rgb + normal.xyz
 	requiredLimits.limits.maxBindGroups = 1;
 	requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
 	requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
-	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
-	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
-	requiredLimits.limits.maxInterStageShaderComponents = 3;
 	requiredLimits.limits.maxTextureDimension1D = 480;
 	requiredLimits.limits.maxTextureDimension2D = 640;
 	requiredLimits.limits.maxTextureArrayLayers = 1;
@@ -558,7 +571,7 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 
 void Application::InitializeBuffers()
 {
-	bool success = loadGeometry(RESOURCE_DIR "/pyramid.txt", pointData, indexData, 3);
+	bool success = loadGeometry(RESOURCE_DIR "/pyramid.txt", pointData, indexData, 6); // position.xyz + normal.xyz
 	if (!success) {
 		std::cerr << "Could not load geometry!" << std::endl;
 	}
@@ -591,8 +604,6 @@ void Application::InitializeBuffers()
 
 	uniforms.time = 1.0f;
 	uniforms.color = { 0.0f, 1.0f, 0.4f, 1.0f };
-
-	constexpr float PI = 3.14159265358979323846f;
 
 	float angle1 = (float)glfwGetTime();
 	float angle2 = 3.0 * PI / 4.0;
