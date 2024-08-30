@@ -23,6 +23,7 @@ struct SharedUniforms {
 
 @group(0) @binding(0) var<uniform> uSharedUniforms: SharedUniforms;
 @group(0) @binding(1) var gradientTexture: texture_2d<f32>;
+@group(0) @binding(2) var textureSampler: sampler;
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
@@ -30,14 +31,13 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.position = uSharedUniforms.projectionMatrix * uSharedUniforms.viewMatrix * uSharedUniforms.modelMatrix * vec4f(in.position, 1.0);
     out.normal = (uSharedUniforms.modelMatrix * vec4f(in.normal, 0.0)).xyz;
     out.color = in.color;
-    out.uv = in.uv;
+    out.uv = in.uv * 6.0;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    let texelCoords = vec2i(in.uv * vec2f(textureDimensions(gradientTexture)));
-    let color = textureLoad(gradientTexture, texelCoords, 0).rgb;
+    let color = textureSample(gradientTexture, textureSampler, in.uv).rgb;
     // let normal = normalize(in.normal);
     // let lightColor1 = vec3f(1.0, 0.9, 0.6);
     // let lightColor2 = vec3f(0.6, 0.9, 1.0);
