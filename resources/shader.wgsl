@@ -2,12 +2,14 @@ struct VertexInput {
 	@location(0) position: vec3f, // position.xyz
     @location(1) normal: vec3f,// normal.xyz
 	@location(2) color: vec3f,
+	@location(3) uv: vec2f,
 };
 
 struct VertexOutput {
 	@builtin(position) position: vec4f,
 	@location(0) color: vec3f,
 	@location(1) normal: vec3f,
+	@location(2) uv: vec2f,
 };
 
 struct SharedUniforms {
@@ -28,12 +30,14 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.position = uSharedUniforms.projectionMatrix * uSharedUniforms.viewMatrix * uSharedUniforms.modelMatrix * vec4f(in.position, 1.0);
     out.normal = (uSharedUniforms.modelMatrix * vec4f(in.normal, 0.0)).xyz;
     out.color = in.color;
+    out.uv = in.uv;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    let color = textureLoad(gradientTexture, vec2i(in.position.xy), 0).rgb;
+    let texelCoords = vec2i(in.uv * vec2f(textureDimensions(gradientTexture)));
+    let color = textureLoad(gradientTexture, texelCoords, 0).rgb;
     // let normal = normalize(in.normal);
     // let lightColor1 = vec3f(1.0, 0.9, 0.6);
     // let lightColor2 = vec3f(0.6, 0.9, 1.0);

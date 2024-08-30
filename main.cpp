@@ -30,14 +30,15 @@ using namespace wgpu;
 namespace fs = std::filesystem;
 
 using glm::mat4x4;
-using glm::vec4;
+using glm::vec2;
 using glm::vec3;
+using glm::vec4;
 using std::vector;
 using std::string;
 using std::cout;
 using std::endl;
 
-// constexpr float PI = 3.14159265358979323846f;
+constexpr float PI = 3.14159265358979323846f;
 
 struct SharedUniforms {
 	mat4x4 projectionMatrix;
@@ -52,6 +53,7 @@ struct VertexAttributes {
 	vec3 position;
 	vec3 normal;
 	vec3 color;
+	vec2 uv;
 };
 
 // Validate byte alignment in compile time
@@ -147,6 +149,11 @@ bool loadGeometryFromObj(const fs::path& path, vector<VertexAttributes>& vertexD
 				attrib.colors[3 * idx.vertex_index + 1],
 				attrib.colors[3 * idx.vertex_index + 2]
 			};
+
+			vertexData[offset + i].uv = {
+				attrib.texcoords[2 * idx.texcoord_index + 0],
+				1 - attrib.texcoords[2 * idx.texcoord_index + 1],
+			};
 		}
 	}
 
@@ -207,7 +214,7 @@ bool Application::Initialize()
 	glfwInit();
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-	window = glfwCreateWindow(1280, 960, "Learn WebGPU", nullptr, nullptr);
+	window = glfwCreateWindow(640, 480, "Learn WebGPU", nullptr, nullptr);
 
 	Instance instance = wgpuCreateInstance(nullptr);
 
@@ -249,8 +256,8 @@ bool Application::Initialize()
 
 	SurfaceConfiguration surfaceConfig = {};
 
-	surfaceConfig.width = 1280;
-	surfaceConfig.height = 960;
+	surfaceConfig.width = 640;
+	surfaceConfig.height = 480;
 	surfaceConfig.usage = TextureUsage::RenderAttachment;
 	surfaceFormat = surface.getPreferredFormat(adapter);
 	surfaceConfig.format = surfaceFormat;
@@ -424,7 +431,7 @@ void Application::InitializePipeline()
 	renderPipelineDesc.label = "Render Pipeline";
 
 	VertexBufferLayout vertexBufferLayout;
-	vector<VertexAttribute> vertexAttribs(3); // position + normal + color
+	vector<VertexAttribute> vertexAttribs(4); // position, normal, color, uv
 
 	vertexAttribs[0].shaderLocation = 0;
 	vertexAttribs[0].format = VertexFormat::Float32x3; //  xyz
@@ -437,6 +444,10 @@ void Application::InitializePipeline()
 	vertexAttribs[2].shaderLocation = 2;
 	vertexAttribs[2].format = VertexFormat::Float32x3;
 	vertexAttribs[2].offset = offsetof(VertexAttributes, color);
+
+	vertexAttribs[3].shaderLocation = 3;
+	vertexAttribs[3].format = VertexFormat::Float32x2;
+	vertexAttribs[3].offset = offsetof(VertexAttributes, uv);
 
 	vertexBufferLayout.attributeCount = static_cast<uint32_t>(vertexAttribs.size());
 	vertexBufferLayout.attributes = vertexAttribs.data();
@@ -493,7 +504,7 @@ void Application::InitializePipeline()
 	depthTextureDesc.format = depthTextureFormat;
 	depthTextureDesc.mipLevelCount = 1;
 	depthTextureDesc.sampleCount = 1;
-	depthTextureDesc.size = { 1280, 960, 1 };
+	depthTextureDesc.size = { 640, 480, 1 };
 	depthTextureDesc.usage = TextureUsage::RenderAttachment;
 	depthTextureDesc.viewFormatCount = 1;
 	depthTextureDesc.viewFormats = (WGPUTextureFormat*)&depthTextureFormat;
@@ -612,18 +623,18 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 	adapter.getLimits(&supportedLimits);
 
 	RequiredLimits requiredLimits = Default;
-	requiredLimits.limits.maxVertexAttributes = 3;
+	requiredLimits.limits.maxVertexAttributes = 4; // position, normal, color, uv
 	requiredLimits.limits.maxVertexBuffers = 1;
 	requiredLimits.limits.maxBufferSize = 500000 * sizeof(VertexAttributes);
 	requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
 	requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
 	requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
-	requiredLimits.limits.maxInterStageShaderComponents = 6; // color.rgb + normal.xyz
+	requiredLimits.limits.maxInterStageShaderComponents = 8; // color.rgb + normal.xyz + texelCoords.xy
 	requiredLimits.limits.maxBindGroups = 1;
 	requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
 	requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
-	requiredLimits.limits.maxTextureDimension1D = 960;
-	requiredLimits.limits.maxTextureDimension2D = 1280;
+	requiredLimits.limits.maxTextureDimension1D = 480;
+	requiredLimits.limits.maxTextureDimension2D = 640;
 	requiredLimits.limits.maxTextureArrayLayers = 1;
 	requiredLimits.limits.maxSampledTexturesPerShaderStage = 1;
 
@@ -632,7 +643,7 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 
 void Application::InitializeBuffers()
 {
-	bool success = loadGeometryFromObj(RESOURCE_DIR "/plane.obj", vertexData);
+	bool success = loadGeometryFromObj(RESOURCE_DIR "/cube.obj", vertexData);
 	if (!success) {
 		std::cerr << "Could not load geometry!" << endl;;
 	}
@@ -671,14 +682,14 @@ void Application::InitializeBuffers()
 
 	// float near = 0.001f;
 	// float far = 100.0f;
-	// float ratio = 1280.0f / 960.0f;
+	// float ratio = 640.0f / 480.0f;
 	// float focalLength = 2.0;
 	// float fov = 2 * glm::atan(1 / focalLength);
 	// uniforms.projectionMatrix = glm::perspective(fov, ratio, near, far);
 
 	uniforms.modelMatrix = mat4x4(1.0);
-	uniforms.viewMatrix = glm::scale(mat4x4(1.0), vec3(1.0f));
-	uniforms.projectionMatrix = glm::ortho(-1, 1, -1, 1, -1, 1);
+	uniforms.viewMatrix = glm::lookAt(vec3(-2.0f, -3.0f, 2.0f), vec3(0.0f), vec3(0, 0, 1));
+	uniforms.projectionMatrix = glm::perspective(45 * PI / 180, 640.0f / 480.f, 0.01f, 100.0f);
 
 	queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(SharedUniforms));
 }
