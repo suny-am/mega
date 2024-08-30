@@ -45,6 +45,8 @@ set_target_properties(
 
 if(MSVC)
   target_compile_options(App PRIVATE /W4)
+  # dsiable warning C4244: conversion from 'int' to 'short', possible loss of data
+  target_compile_options(App PUBLIC /wd4244)
 else()
   target_compile_options(App PRIVATE -Wall -Wextra -pedantic)
 endif()
