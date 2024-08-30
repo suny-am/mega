@@ -15,6 +15,10 @@
 *.lo
 *.o
 *.obj
+*.mtl
+
+# Texture Files
+*.jpg
 
 # Precompiled Headers
 *.gch

@@ -4,6 +4,8 @@ project(
   VERSION 0.1.0
   LANGUAGES CXX C)
 
+include(utils.cmake)
+
 option(DEV_MODE "Set up development helper settings" ON)
 
 if(NOT EMSCRIPTEN)
@@ -14,12 +16,10 @@ else()
 endif()
 
 add_subdirectory(glfw3webgpu)
-
 add_subdirectory(webgpu)
 
-add_executable(App main.cpp)
-
-target_include_directories(App PRIVATE .)
+add_executable(App Implementations.cpp ResourceManager.h ResourceManager.cpp
+                   Application.h Application.cpp main.cpp)
 
 if(DEV_MODE)
   target_compile_definitions(
@@ -28,28 +28,17 @@ else()
   target_compile_definitions(App PRIVATE RESOURCE_DIR="./resources")
 endif()
 
-target_compile_definitions(
-  App PRIVATE GLM_FORCE_DEPTH_ZERO_TONE=1 GLM_FORCE_LEFT_HANDED=1
-)
+target_compile_definitions(App PRIVATE GLM_FORCE_DEPTH_ZERO_TONE=1
+                                       GLM_FORCE_LEFT_HANDED=1)
+
+target_include_directories(App PRIVATE .)
 
 target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu)
 
+target_treat_all_warnings_as_errors(App)
 target_copy_webgpu_binaries(App)
 
-set_target_properties(
-  App
-  PROPERTIES CXX_STANDARD 17
-             CXX_STANDARD_REQUIRED ON
-             CXX_EXTENSIONS OFF
-             COMPILE_WARNING_AS_ERROR ON)
-
-if(MSVC)
-  target_compile_options(App PRIVATE /W4)
-  # dsiable warning C4244: conversion from 'int' to 'short', possible loss of data
-  target_compile_options(App PUBLIC /wd4244)
-else()
-  target_compile_options(App PRIVATE -Wall -Wextra -pedantic)
-endif()
+set_target_properties(App PROPERTIES CXX_STANDARD 17)
 
 if(XCODE)
   set_target_properties(
@@ -61,3 +50,18 @@ if(EMSCRIPTEN)
   set_target_properties(App PROPERTIES SUFFIX ".html")
   target_link_options((App PRICVATE -sASYNCIFY))
 endif()
+
+if(MSVC)
+
+  # Disable warnings produced by GLM
+  #
+  # C4201: nonstandard extension used: nameless struct/union
+  target_compile_options(App PUBLIC /wd4201)
+  # C4305: truncation from 'int' to 'bool' in 'if' condition
+  target_compile_options(App PUBLIC /wd4305)
+
+  # Disable warnings produced by stb_image:
+  #
+  # C4244: conversion from 'int' to 'short', possible loss of data
+  target_compile_options(App PUBLIC /wd4244)
+endif(MSVC)

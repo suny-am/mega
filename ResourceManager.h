@@ -1,0 +1,28 @@
+#pragma once
+#include <webgpu/webgpu.hpp>
+#include <glm/glm.hpp>
+#include <glm/ext.hpp>
+#include <filesystem>
+
+using namespace wgpu;
+
+class ResourceManager {
+public:
+    using path = std::filesystem::path;
+    using vec3 = glm::vec3;
+    using vec2 = glm::vec2;
+
+
+    struct VertexAttributes {
+        vec3 position;
+        vec3 normal;
+        vec3 color;
+        vec2 uv;
+    };
+
+    static ShaderModule loadShaderModule(const path& path, Device device);
+
+    static bool loadGeometryFromObj(const path& path, std::vector<VertexAttributes>& vertexData);
+
+    static Texture loadTexture(const path& path, Device device, TextureView* pTextureView = nullptr);
+};
