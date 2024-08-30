@@ -37,7 +37,7 @@ using std::string;
 using std::cout;
 using std::endl;
 
-constexpr float PI = 3.14159265358979323846f;
+// constexpr float PI = 3.14159265358979323846f;
 
 struct SharedUniforms {
 	mat4x4 projectionMatrix;
@@ -90,11 +90,12 @@ private:
 	SharedUniforms uniforms;
 	TextureView depthTextureView;
 	Texture depthTexture;
-	mat4x4 S;
-	mat4x4 T1;
-	mat4x4 T2;
-	mat4x4 R1;
-	mat4x4 R2;
+	Texture diffuseTexture;
+	// mat4x4 S;
+	// mat4x4 T1;
+	// mat4x4 T2;
+	// mat4x4 R1;
+	// mat4x4 R2;
 };
 
 bool loadGeometryFromObj(const fs::path& path, vector<VertexAttributes>& vertexData) {
@@ -274,6 +275,8 @@ void Application::Terminate()
 	depthTextureView.release();
 	depthTexture.destroy();
 	depthTexture.release();
+	diffuseTexture.destroy();
+	diffuseTexture.release();
 	vertexBuffer.release();
 	renderPipeline.release();
 	surface.unconfigure();
@@ -292,13 +295,13 @@ void Application::MainLoop()
 	if (!targetView)
 		return;
 
-	uniforms.time = static_cast<float>(glfwGetTime());
-	queue.writeBuffer(uniformBuffer, offsetof(SharedUniforms, time), &uniforms.time, sizeof(SharedUniforms::time));
+	// uniforms.time = static_cast<float>(glfwGetTime());
+	// queue.writeBuffer(uniformBuffer, offsetof(SharedUniforms, time), &uniforms.time, sizeof(SharedUniforms::time));
 
-	float angle1 = uniforms.time;
-	R1 = glm::rotate(mat4x4(1.0), angle1, vec3(0.0, 0.0, 1.0));
-	uniforms.modelMatrix = R1 * T1 * S;
-	queue.writeBuffer(uniformBuffer, offsetof(SharedUniforms, modelMatrix), &uniforms.modelMatrix, sizeof(SharedUniforms::modelMatrix));
+	// float angle1 = uniforms.time;
+	// R1 = glm::rotate(mat4x4(1.0), angle1, vec3(0.0, 0.0, 1.0));
+	// uniforms.modelMatrix = R1 * T1 * S;
+	// queue.writeBuffer(uniformBuffer, offsetof(SharedUniforms, modelMatrix), &uniforms.modelMatrix, sizeof(SharedUniforms::modelMatrix));
 
 	CommandEncoderDescriptor encoderDesc = {};
 	encoderDesc.label = "My command encoder";
@@ -418,6 +421,7 @@ void Application::InitializePipeline()
 	cout << "Shader module: " << shaderModule << endl;;
 
 	RenderPipelineDescriptor renderPipelineDesc;
+	renderPipelineDesc.label = "Render Pipeline";
 
 	VertexBufferLayout vertexBufferLayout;
 	vector<VertexAttribute> vertexAttribs(3); // position + normal + color
@@ -504,22 +508,64 @@ void Application::InitializePipeline()
 	depthTextureViewDesc.format = depthTextureFormat;
 	depthTextureView = depthTexture.createView(depthTextureViewDesc);
 
-
 	renderPipelineDesc.depthStencil = &depthStencilState;
+
+	TextureDescriptor diffuseTextureDesc;
+	diffuseTextureDesc.dimension = TextureDimension::_2D;
+	diffuseTextureDesc.size = { 256, 256, 1 };
+	diffuseTextureDesc.mipLevelCount = 1;
+	diffuseTextureDesc.sampleCount = 1;
+	diffuseTextureDesc.format = TextureFormat::RGBA8Unorm; // RGBA channels; 8 bits per channel; unsigned real number values in normalized space 0-1
+	diffuseTextureDesc.usage = TextureUsage::TextureBinding | TextureUsage::CopyDst;
+	diffuseTextureDesc.viewFormatCount = 0;
+	diffuseTextureDesc.viewFormats = nullptr;
+	diffuseTexture = device.createTexture(diffuseTextureDesc);
+
+	vector<uint8_t> pixels(4 * diffuseTextureDesc.size.width * diffuseTextureDesc.size.height);
+	for (uint32_t i = 0; i < diffuseTextureDesc.size.width; ++i) {
+		for (uint32_t j = 0; j < diffuseTextureDesc.size.height; ++j) {
+			uint8_t* p = &pixels[4 * (j * diffuseTextureDesc.size.width + i)];
+			p[0] = (i / 16) % 2 == (j / 16) % 2 ? 255 : 0; // R
+			p[1] = ((i - j) / 16) % 2 == 0 ? 255 : 0; // G
+			p[2] = ((i + j) / 16) % 2 == 0 ? 255 : 0; // B
+			p[3] = 255; // A
+		}
+	}
+
+	ImageCopyTexture textureDestination;
+	textureDestination.texture = diffuseTexture;
+	textureDestination.mipLevel = 0;
+	textureDestination.origin = { 0,0,0 };
+	textureDestination.aspect = TextureAspect::All;
+
+	TextureDataLayout textureSource;
+	textureSource.offset = 0;
+	textureSource.bytesPerRow = 4 * diffuseTextureDesc.size.width;
+	textureSource.rowsPerImage = diffuseTextureDesc.size.height;
+
+	queue.writeTexture(textureDestination, pixels.data(), pixels.size(), textureSource, diffuseTextureDesc.size);
 
 	renderPipelineDesc.multisample.count = 1;
 	renderPipelineDesc.multisample.mask = ~0u;
 	renderPipelineDesc.multisample.alphaToCoverageEnabled = false;
 
-	BindGroupLayoutEntry bindingLayout = Default;
+	vector<BindGroupLayoutEntry> bindingLayoutEntries(2, Default);
+
+	BindGroupLayoutEntry& bindingLayout = bindingLayoutEntries[0];
 	bindingLayout.binding = 0;
 	bindingLayout.visibility = ShaderStage::Vertex | ShaderStage::Fragment;
 	bindingLayout.buffer.type = BufferBindingType::Uniform;
 	bindingLayout.buffer.minBindingSize = sizeof(SharedUniforms);
 
+	BindGroupLayoutEntry& textureBindingLayout = bindingLayoutEntries[1];
+	textureBindingLayout.binding = 1;
+	textureBindingLayout.visibility = ShaderStage::Fragment;
+	textureBindingLayout.texture.sampleType = TextureSampleType::Float;
+	textureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
+
 	BindGroupLayoutDescriptor bindGroupLayoutDesc;
-	bindGroupLayoutDesc.entryCount = 1;
-	bindGroupLayoutDesc.entries = &bindingLayout;
+	bindGroupLayoutDesc.entryCount = (uint32_t)bindingLayoutEntries.size();
+	bindGroupLayoutDesc.entries = bindingLayoutEntries.data();
 	BindGroupLayout bindGroupLayout = device.createBindGroupLayout(bindGroupLayoutDesc);
 
 	PipelineLayoutDescriptor layoutDesc;
@@ -531,16 +577,30 @@ void Application::InitializePipeline()
 
 	renderPipeline = device.createRenderPipeline(renderPipelineDesc);
 
-	BindGroupEntry binding;
-	binding.binding = 0;
-	binding.buffer = uniformBuffer;
-	binding.offset = 0;
-	binding.size = sizeof(SharedUniforms);
+	vector<BindGroupEntry> bindings(2);
+
+	bindings[0].binding = 0;
+	bindings[0].buffer = uniformBuffer;
+	bindings[0].offset = 0;
+	bindings[0].size = sizeof(SharedUniforms);
+
+	TextureViewDescriptor textureViewDesc;
+	textureViewDesc.aspect = TextureAspect::All;
+	textureViewDesc.baseArrayLayer = 0;
+	textureViewDesc.arrayLayerCount = 1;
+	textureViewDesc.baseMipLevel = 0;
+	textureViewDesc.mipLevelCount = 1;
+	textureViewDesc.dimension = TextureViewDimension::_2D;
+	textureViewDesc.format = diffuseTextureDesc.format;
+	TextureView textureView = diffuseTexture.createView(textureViewDesc);
+
+	bindings[1].binding = 1;
+	bindings[1].textureView = textureView;
 
 	BindGroupDescriptor bindGroupDesc;
 	bindGroupDesc.layout = bindGroupLayout;
-	bindGroupDesc.entryCount = bindGroupLayoutDesc.entryCount;
-	bindGroupDesc.entries = &binding;
+	bindGroupDesc.entryCount = (uint32_t)bindings.size();
+	bindGroupDesc.entries = bindings.data();
 	bindGroup = device.createBindGroup(bindGroupDesc);
 
 	shaderModule.release();
@@ -565,13 +625,14 @@ RequiredLimits Application::GetRequiredLimits(Adapter adapter) const
 	requiredLimits.limits.maxTextureDimension1D = 960;
 	requiredLimits.limits.maxTextureDimension2D = 1280;
 	requiredLimits.limits.maxTextureArrayLayers = 1;
+	requiredLimits.limits.maxSampledTexturesPerShaderStage = 1;
 
 	return requiredLimits;
 }
 
 void Application::InitializeBuffers()
 {
-	bool success = loadGeometryFromObj(RESOURCE_DIR "/mammoth.obj", vertexData);
+	bool success = loadGeometryFromObj(RESOURCE_DIR "/plane.obj", vertexData);
 	if (!success) {
 		std::cerr << "Could not load geometry!" << endl;;
 	}
@@ -596,25 +657,28 @@ void Application::InitializeBuffers()
 	uniforms.time = 1.0f;
 	uniforms.color = { 0.0f, 1.0f, 0.4f, 1.0f };
 
-	float angle1 = (float)glfwGetTime();
-	float angle2 = 3.0 * PI / 4.0;
-	vec3 focalPoint = vec3(0.0, 0.0, -1.0);
+	// float angle1 = (float)glfwGetTime();
+	// float angle2 = 3.0 * PI / 4.0;
+	// vec3 focalPoint = vec3(0.0, 0.0, -1.0);
 
-	S = glm::scale(mat4x4(1.0), vec3(0.3f));
-	T1 = mat4x4(1.0);
-	R1 = glm::rotate(mat4x4(1.0), angle1, vec3(0.5, 0.0, 0.0));
-	uniforms.modelMatrix = R1 * T1 * S;
+	// S = glm::scale(mat4x4(1.0), vec3(0.3f));
+	// T1 = mat4x4(1.0);
+	// R1 = glm::rotate(mat4x4(1.0), angle1, vec3(0.5, 0.0, 0.0));
 
-	R2 = glm::rotate(mat4x4(1.0), -angle2, vec3(1.0, 0.0, 0.0));
-	T2 = glm::translate(mat4x4(1.0), -focalPoint);
-	uniforms.viewMatrix = T2 * R2;
+	// R2 = glm::rotate(mat4x4(1.0), -angle2, vec3(1.0, 0.0, 0.0));
+	// T2 = glm::translate(mat4x4(1.0), -focalPoint);
+	// uniforms.viewMatrix = T2 * R2;
 
-	float near = 0.001f;
-	float far = 100.0f;
-	float ratio = 1280.0f / 960.0f;
-	float focalLength = 2.0;
-	float fov = 2 * glm::atan(1 / focalLength);
-	uniforms.projectionMatrix = glm::perspective(fov, ratio, near, far);
+	// float near = 0.001f;
+	// float far = 100.0f;
+	// float ratio = 1280.0f / 960.0f;
+	// float focalLength = 2.0;
+	// float fov = 2 * glm::atan(1 / focalLength);
+	// uniforms.projectionMatrix = glm::perspective(fov, ratio, near, far);
+
+	uniforms.modelMatrix = mat4x4(1.0);
+	uniforms.viewMatrix = glm::scale(mat4x4(1.0), vec3(1.0f));
+	uniforms.projectionMatrix = glm::ortho(-1, 1, -1, 1, -1, 1);
 
 	queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(SharedUniforms));
 }

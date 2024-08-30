@@ -20,6 +20,7 @@ struct SharedUniforms {
 }
 
 @group(0) @binding(0) var<uniform> uSharedUniforms: SharedUniforms;
+@group(0) @binding(1) var gradientTexture: texture_2d<f32>;
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
@@ -32,16 +33,17 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    let normal = normalize(in.normal);
-    let lightColor1 = vec3f(1.0, 0.9, 0.6);
-    let lightColor2 = vec3f(0.6, 0.9, 1.0);
-    let lightDirection1 = vec3f(0.5, -0.9, 0.1);
-    let lightDirection2 = vec3f(0.2, 0.4, 0.3);
-    // clamp negative values to 0.0
-    let shading1 = max(0.0, dot(lightDirection1, normal));
-    let shading2 = max(0.0, dot(lightDirection2, normal));
-    let shading = shading1 * lightColor1 + shading2 * lightColor2;
-    let color = in.color * shading;
+    let color = textureLoad(gradientTexture, vec2i(in.position.xy), 0).rgb;
+    // let normal = normalize(in.normal);
+    // let lightColor1 = vec3f(1.0, 0.9, 0.6);
+    // let lightColor2 = vec3f(0.6, 0.9, 1.0);
+    // let lightDirection1 = vec3f(0.5, -0.9, 0.1);
+    // let lightDirection2 = vec3f(0.2, 0.4, 0.3);
+    // // clamp negative values to 0.0
+    // let shading1 = max(0.0, dot(lightDirection1, normal));
+    // let shading2 = max(0.0, dot(lightDirection2, normal));
+    // let shading = shading1 * lightColor1 + shading2 * lightColor2;
+    // color = color * shading;
     let linear_color = pow(color, vec3f(2.2)); // correct color space
     return vec4f(color, uSharedUniforms.color.a);
 }
