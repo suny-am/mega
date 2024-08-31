@@ -16,14 +16,32 @@
 #include <cstddef>
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_wgpu.h"
+#include <glm/gtx/polar_coordinates.hpp>
 
 using std::cout;
 using std::cerr;
 using std::endl;
 using std::vector;
+using glm::vec4;
+using glm::vec3;
+using glm::vec2;
+using glm::degrees;
+using glm::euclidean;
+using glm::radians;
+using glm::value_ptr;
+
 
 using namespace wgpu;
 using VertexAttributes = ResourceManager::VertexAttributes;
+
+namespace ImGui {
+    bool DragDirection(const char* label, vec4& direction) {
+        vec2 angles = degrees(polar(vec3(direction)));
+        bool changed = ImGui::DragFloat2(label, value_ptr(angles));
+        direction = vec4(euclidean(radians(angles)), direction.w);
+        return changed;
+    }
+}
 
 constexpr float PI = 3.14159265358979323846f;
 
@@ -31,18 +49,24 @@ bool Application::onInit() {
     if (!initWindowAndDevice()) return false;
     if (!initSurfaceConfiguration()) return false;
     if (!initDepthBuffer()) return false;
+    if (!initBindGroupLayout()) return false;
     if (!initRenderPipeline()) return false;
     if (!initTexture()) return false;
     if (!initGeometry()) return false;
     if (!initUniforms()) return false;
+    if (!initLightingUniforms()) return false;
     if (!initBindGroup()) return false;
     if (!initGui()) return false;
     return true;
 }
 
 void Application::onFrame() {
-    updateDragInertia();
     glfwPollEvents();
+    updateDragInertia();
+    updateLightingUniforms();
+
+    m_uniforms.time = static_cast<float>(glfwGetTime());
+    m_queue.writeBuffer(m_uniformBuffer, offsetof(SharedUniforms, time), &m_uniforms.time, sizeof(SharedUniforms::time));
 
     TextureView nextTexture = getNextSurfaceTextureView();
     if (!nextTexture) {
@@ -103,11 +127,12 @@ void Application::onFrame() {
     renderPass.end();
     renderPass.release();
 
+    nextTexture.release();
+
     CommandBufferDescriptor cmdBufferDescriptor = {};
     cmdBufferDescriptor.label = "Command buffer";
     CommandBuffer command = encoder.finish(cmdBufferDescriptor);
     encoder.release();
-
     m_queue.submit(command);
     command.release();
 
@@ -133,10 +158,12 @@ void Application::onResize() {
 void Application::onFinish() {
     terminateGui();
     terminateBindGroup();
+    terminateLightingUniforms();
     terminateUniforms();
     terminateGeometry();
     terminateTexture();
     terminateRenderPipeline();
+    terminateBindGroupLayout();
     terminateDepthBuffer();
     terminateWindowAndDevice();
 }
@@ -165,26 +192,6 @@ bool Application::initWindowAndDevice() {
         return false;
     }
 
-    // Window callbacks
-    glfwSetWindowUserPointer(m_window, this);
-    glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int, int) {
-        auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
-        if (that != nullptr) that->onResize();
-                                   });
-    glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xPos, double yPos) {
-        auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
-        if (that != nullptr) that->onMouseMove(xPos, yPos);
-                             });
-    glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int button, int action, int mods) {
-        auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
-        if (that != nullptr) that->onMouseButton(button, action, mods);
-                               });
-    glfwSetScrollCallback(m_window, [](GLFWwindow* window, double xOffset, double yOffset) {
-        auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
-        if (that != nullptr) that->onScroll(xOffset, yOffset);
-                          });
-
-
     cout << "Requesting adapter..." << endl;
     m_surface = glfwGetWGPUSurface(m_instance, m_window);
     RequestAdapterOptions adapterOpts = {};
@@ -195,7 +202,7 @@ bool Application::initWindowAndDevice() {
     SupportedLimits supportedLimits;
     adapter.getLimits(&supportedLimits);
 
-    cout << "Requesting m_device..." << endl;
+    cout << "Requesting device..." << endl;
     RequiredLimits requiredLimits = Default;
     requiredLimits.limits.maxVertexAttributes = 4; // position, normal, color, uv
     requiredLimits.limits.maxVertexBuffers = 1;
@@ -205,7 +212,7 @@ bool Application::initWindowAndDevice() {
     requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
     requiredLimits.limits.maxInterStageShaderComponents = 8; // color.rgb + normal.xyz + texelCoords.xy
     requiredLimits.limits.maxBindGroups = 2;
-    requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
+    requiredLimits.limits.maxUniformBuffersPerShaderStage = 2;
     requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
     requiredLimits.limits.maxTextureDimension1D = 480;
     requiredLimits.limits.maxTextureDimension2D = 640;
@@ -254,6 +261,25 @@ bool Application::initWindowAndDevice() {
 
     m_surfaceFormat = m_surface.getPreferredFormat(adapter);
 
+    // Window callbacks
+    glfwSetWindowUserPointer(m_window, this);
+    glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int, int) {
+        auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+        if (that != nullptr) that->onResize();
+                                   });
+    glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xPos, double yPos) {
+        auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+        if (that != nullptr) that->onMouseMove(xPos, yPos);
+                             });
+    glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int button, int action, int mods) {
+        auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+        if (that != nullptr) that->onMouseButton(button, action, mods);
+                               });
+    glfwSetScrollCallback(m_window, [](GLFWwindow* window, double xOffset, double yOffset) {
+        auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+        if (that != nullptr) that->onScroll(xOffset, yOffset);
+                          });
+
     adapter.release();
     return m_device != nullptr;
 }
@@ -269,7 +295,6 @@ void Application::terminateWindowAndDevice() {
 }
 
 bool Application::initSurfaceConfiguration() {
-
     // Get the current size of the window's framebuffer
     int width, height;
     glfwGetFramebufferSize(m_window, &width, &height);
@@ -292,7 +317,6 @@ bool Application::initSurfaceConfiguration() {
 }
 
 bool Application::initDepthBuffer() {
-
     // Get the current size of the window's framebuffer
     int width, height;
     glfwGetFramebufferSize(m_window, &width, &height);
@@ -321,12 +345,50 @@ bool Application::initDepthBuffer() {
 }
 
 void Application::terminateDepthBuffer() {
-    m_depthTexture.release();
     m_depthTextureView.release();
+    m_depthTexture.destroy();
+    m_depthTexture.release();
+}
+
+bool Application::initBindGroupLayout() {
+    vector<BindGroupLayoutEntry> bindingLayoutEntries(4, Default);
+
+    BindGroupLayoutEntry& bindingLayout = bindingLayoutEntries[0];
+    bindingLayout.binding = 0;
+    bindingLayout.visibility = ShaderStage::Vertex | ShaderStage::Fragment;
+    bindingLayout.buffer.type = BufferBindingType::Uniform;
+    bindingLayout.buffer.minBindingSize = sizeof(SharedUniforms);
+
+    BindGroupLayoutEntry& textureBindingLayout = bindingLayoutEntries[1];
+    textureBindingLayout.binding = 1;
+    textureBindingLayout.visibility = ShaderStage::Fragment;
+    textureBindingLayout.texture.sampleType = TextureSampleType::Float;
+    textureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
+
+    BindGroupLayoutEntry& samplerBindingLayout = bindingLayoutEntries[2];
+    samplerBindingLayout.binding = 2;
+    samplerBindingLayout.visibility = ShaderStage::Fragment;
+    samplerBindingLayout.sampler.type = SamplerBindingType::Filtering;
+
+    BindGroupLayoutEntry& lightingUniformLayout = bindingLayoutEntries[3];
+    lightingUniformLayout.binding = 3;
+    lightingUniformLayout.visibility = ShaderStage::Fragment;
+    lightingUniformLayout.buffer.type = BufferBindingType::Uniform;
+    lightingUniformLayout.buffer.minBindingSize = sizeof(LightingUniforms);
+
+    BindGroupLayoutDescriptor bindGroupLayoutDesc;
+    bindGroupLayoutDesc.entryCount = (uint32_t)bindingLayoutEntries.size();
+    bindGroupLayoutDesc.entries = bindingLayoutEntries.data();
+    m_bindGroupLayout = m_device.createBindGroupLayout(bindGroupLayoutDesc);
+
+    return m_bindGroupLayout != nullptr;
+}
+
+void Application::terminateBindGroupLayout() {
+    m_bindGroupLayout.release();
 }
 
 bool Application::initRenderPipeline() {
-
     cout << "Creating shader module..." << endl;
     m_shaderModule = ResourceManager::loadShaderModule(RESOURCE_DIR "/shader.wgsl", m_device);
     cout << "Shader module: " << m_shaderModule << endl;
@@ -406,30 +468,6 @@ bool Application::initRenderPipeline() {
     pipelineDesc.multisample.count = 1;
     pipelineDesc.multisample.mask = ~0u;
     pipelineDesc.multisample.alphaToCoverageEnabled = false;
-
-    vector<BindGroupLayoutEntry> bindingLayoutEntries(3, Default);
-
-    BindGroupLayoutEntry& bindingLayout = bindingLayoutEntries[0];
-    bindingLayout.binding = 0;
-    bindingLayout.visibility = ShaderStage::Vertex | ShaderStage::Fragment;
-    bindingLayout.buffer.type = BufferBindingType::Uniform;
-    bindingLayout.buffer.minBindingSize = sizeof(SharedUniforms);
-
-    BindGroupLayoutEntry& textureBindingLayout = bindingLayoutEntries[1];
-    textureBindingLayout.binding = 1;
-    textureBindingLayout.visibility = ShaderStage::Fragment;
-    textureBindingLayout.texture.sampleType = TextureSampleType::Float;
-    textureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
-
-    BindGroupLayoutEntry& samplerBindingLayout = bindingLayoutEntries[2];
-    samplerBindingLayout.binding = 2;
-    samplerBindingLayout.visibility = ShaderStage::Fragment;
-    samplerBindingLayout.sampler.type = SamplerBindingType::Filtering;
-
-    BindGroupLayoutDescriptor bindGroupLayoutDesc;
-    bindGroupLayoutDesc.entryCount = (uint32_t)bindingLayoutEntries.size();
-    bindGroupLayoutDesc.entries = bindingLayoutEntries.data();
-    m_bindGroupLayout = m_device.createBindGroupLayout(bindGroupLayoutDesc);
 
     PipelineLayoutDescriptor layoutDesc;
     layoutDesc.bindGroupLayoutCount = 1;
@@ -533,8 +571,34 @@ void Application::terminateUniforms() {
     m_uniformBuffer.release();
 }
 
+bool Application::initLightingUniforms() {
+    BufferDescriptor bufferDesc;
+    bufferDesc.size = sizeof(LightingUniforms);
+    bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
+    bufferDesc.mappedAtCreation = false;
+    m_lightingUniformBuffer = m_device.createBuffer(bufferDesc);
+
+    m_lightingUniforms.directions[0] = { 0.5f, -0.9f, 0.1f, 0.0f };
+    m_lightingUniforms.directions[1] = { 0.2f, 0.4f, 0.3f, 0.0f };
+    m_lightingUniforms.colors[0] = { 1.0f, 0.9f, 0.6f, 1.0f };
+    m_lightingUniforms.colors[1] = { 0.6f, 0.9f, 1.0f, 1.0f };
+
+    updateLightingUniforms();
+
+    return m_lightingUniformBuffer != nullptr;
+}
+
+void Application::terminateLightingUniforms() {
+    m_lightingUniformBuffer.destroy();
+    m_lightingUniformBuffer.release();
+}
+
+void Application::updateLightingUniforms() {
+    m_queue.writeBuffer(m_lightingUniformBuffer, 0, &m_lightingUniforms, sizeof(LightingUniforms));
+}
+
 bool Application::initBindGroup() {
-    vector<BindGroupEntry> bindings(3);
+    vector<BindGroupEntry> bindings(4);
 
     bindings[0].binding = 0;
     bindings[0].buffer = m_uniformBuffer;
@@ -546,6 +610,11 @@ bool Application::initBindGroup() {
 
     bindings[2].binding = 2;
     bindings[2].sampler = m_sampler;
+
+    bindings[3].binding = 3;
+    bindings[3].buffer = m_lightingUniformBuffer;
+    bindings[3].offset = 0;
+    bindings[3].size = sizeof(LightingUniforms);
 
     BindGroupDescriptor bindGroupDesc;
     bindGroupDesc.layout = m_bindGroupLayout;
@@ -588,6 +657,13 @@ void Application::updateViewMatrix() {
         &m_uniforms.viewMatrix,
         sizeof(SharedUniforms::viewMatrix)
     );
+}
+
+void Application::updateLighting() {
+    if(m_lightningUniformsChanged) {
+        // [...] Update m_lightUniforms
+        m_lightningUniformsChanged = false;
+    }
 }
 
 void Application::onMouseMove(double xPos, double yPos) {
@@ -694,31 +770,16 @@ void Application::updateGui(RenderPassEncoder renderPass) {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    //  Build UI components
-    static float f = 0.0f;
-    static int counter = 0;
-    static bool show_demo_window = true;
-    static bool show_another_window = false;
-    static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-    ImGui::Begin("Hello World!");
-
-    ImGui::Text("This is some useful text.");
-    ImGui::Checkbox("Demo Window", &show_demo_window);
-    ImGui::Checkbox("Another Demo Window", &show_another_window);
-
-    ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
-    ImGui::ColorEdit3("clear color", (float*)&clear_color);
-
-    if (ImGui::Button("Button")) {
-        counter++;
+    {
+        bool changed = false;
+        ImGui::Begin("Lighting");
+        ImGui::ColorEdit3("Color #0", glm::value_ptr(m_lightingUniforms.colors[0]));
+        ImGui::DragDirection("Direction #0", m_lightingUniforms.directions[0]) || changed;
+        ImGui::ColorEdit3("Color #1", glm::value_ptr(m_lightingUniforms.colors[1]));
+        ImGui::DragDirection("Direction #1", m_lightingUniforms.directions[1]) || changed;
+        ImGui::End();
+        m_lightningUniformsChanged = changed;
     }
-    ImGui::SameLine();
-    ImGui::Text("Counter = %d", counter);
-
-    ImGuiIO& io = ImGui::GetIO();
-    ImGui::Text("Application averagge %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-    ImGui::End();
 
     // Draw UI components
     ImGui::EndFrame();

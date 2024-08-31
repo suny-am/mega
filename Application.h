@@ -27,6 +27,9 @@ private:
     bool initDepthBuffer();
     void terminateDepthBuffer();
 
+    bool initBindGroupLayout();
+    void terminateBindGroupLayout();
+
     bool initRenderPipeline();
     void terminateRenderPipeline();
 
@@ -39,11 +42,17 @@ private:
     bool initUniforms();
     void terminateUniforms();
 
+    bool initLightingUniforms();
+    void terminateLightingUniforms();
+    void updateLightingUniforms();
+
     bool initBindGroup();
     void terminateBindGroup();
 
     void updateProjectionMatrix();
     void updateViewMatrix();
+
+    void updateLighting();
 
     void updateDragInertia();
 
@@ -67,8 +76,13 @@ private:
         float time;
         float _pad[3];
     };
-
     static_assert(sizeof(SharedUniforms) % 16 == 0);
+
+    struct LightingUniforms {
+        std::array<vec4, 2> directions;
+        std::array<vec4, 2> colors;
+    };
+    static_assert(sizeof(LightingUniforms) % 16 == 0);
 
     struct CameraState {
         vec2 angles = { 0.8f, 0.5f };
@@ -112,6 +126,10 @@ private:
 
     Buffer m_uniformBuffer = nullptr;
     SharedUniforms m_uniforms;
+
+    Buffer m_lightingUniformBuffer = nullptr;
+    LightingUniforms m_lightingUniforms;
+    bool m_lightningUniformsChanged = false;
 
     BindGroup m_bindGroup = nullptr;
 
