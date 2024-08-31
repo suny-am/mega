@@ -8,6 +8,7 @@ class Application {
 public:
     bool onInit();
     void onFrame();
+    void onResize();
     void onFinish();
     bool isRunning();
 
@@ -16,7 +17,6 @@ private:
     void terminateWindowAndDevice();
 
     bool initSurfaceConfiguration();
-    void terminateSurfaceConfiguration();
 
     bool initDepthBuffer();
     void terminateDepthBuffer();
@@ -35,6 +35,8 @@ private:
 
     bool initBindGroup();
     void terminateBindGroup();
+
+    void updateProjectionMatrix();
 
     wgpu::TextureView getNextSurfaceTextureView();
 
