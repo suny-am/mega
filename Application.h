@@ -2,6 +2,8 @@
 #include "webgpu/webgpu.hpp"
 #include <glm/glm.hpp>
 
+using namespace wgpu;
+
 struct GLFWwindow;
 
 class Application {
@@ -45,7 +47,11 @@ private:
 
     void updateDragInertia();
 
-    wgpu::TextureView getNextSurfaceTextureView();
+    TextureView getNextSurfaceTextureView();
+
+    bool initGui();
+    void terminateGui();
+    void updateGui(RenderPassEncoder renderPass);
 
 private:
     using mat4x4 = glm::mat4x4;
@@ -81,33 +87,33 @@ private:
     };
 
     GLFWwindow* m_window = nullptr;
-    wgpu::Instance m_instance = nullptr;
-    wgpu::Surface m_surface = nullptr;
-    wgpu::Device m_device = nullptr;
-    wgpu::Queue m_queue = nullptr;
-    wgpu::TextureFormat m_surfaceFormat = wgpu::TextureFormat::Undefined;
+    Instance m_instance = nullptr;
+    Surface m_surface = nullptr;
+    Device m_device = nullptr;
+    Queue m_queue = nullptr;
+    TextureFormat m_surfaceFormat = TextureFormat::Undefined;
     // Keep the error callback alive
-    std::unique_ptr<wgpu::ErrorCallback> m_errorCallbackHandle;
+    std::unique_ptr<ErrorCallback> m_errorCallbackHandle;
 
-    wgpu::TextureFormat m_depthTextureFormat = wgpu::TextureFormat::Depth24Plus;
-    wgpu::Texture m_depthTexture = nullptr;
-    wgpu::TextureView m_depthTextureView = nullptr;
+    TextureFormat m_depthTextureFormat = TextureFormat::Depth24Plus;
+    Texture m_depthTexture = nullptr;
+    TextureView m_depthTextureView = nullptr;
 
-    wgpu::BindGroupLayout m_bindGroupLayout = nullptr;
-    wgpu::ShaderModule m_shaderModule = nullptr;
-    wgpu::RenderPipeline m_pipeline = nullptr;
+    BindGroupLayout m_bindGroupLayout = nullptr;
+    ShaderModule m_shaderModule = nullptr;
+    RenderPipeline m_pipeline = nullptr;
 
-    wgpu::Sampler m_sampler = nullptr;
-    wgpu::Texture m_texture = nullptr;
-    wgpu::TextureView m_textureView = nullptr;
+    Sampler m_sampler = nullptr;
+    Texture m_texture = nullptr;
+    TextureView m_textureView = nullptr;
 
-    wgpu::Buffer m_vertexBuffer = nullptr;
+    Buffer m_vertexBuffer = nullptr;
     int m_vertexCount = 0;
 
-    wgpu::Buffer m_uniformBuffer = nullptr;
+    Buffer m_uniformBuffer = nullptr;
     SharedUniforms m_uniforms;
 
-    wgpu::BindGroup m_bindGroup = nullptr;
+    BindGroup m_bindGroup = nullptr;
 
     CameraState m_cameraState;
     DragState m_drag;

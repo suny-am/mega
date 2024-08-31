@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include "glm/glm.hpp"
 #include <glm/ext.hpp>
+#include <imgui.h>
 #include <iostream>
 #include <cassert>
 #include <filesystem>
@@ -13,6 +14,8 @@
 #include <sstream>
 #include <string>
 #include <cstddef>
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_wgpu.h"
 
 using std::cout;
 using std::cerr;
@@ -33,6 +36,7 @@ bool Application::onInit() {
     if (!initGeometry()) return false;
     if (!initUniforms()) return false;
     if (!initBindGroup()) return false;
+    if (!initGui()) return false;
     return true;
 }
 
@@ -94,6 +98,8 @@ void Application::onFrame() {
 
     renderPass.draw(m_vertexCount, 1, 0, 0);
 
+    updateGui(renderPass);
+
     renderPass.end();
     renderPass.release();
 
@@ -125,6 +131,7 @@ void Application::onResize() {
 }
 
 void Application::onFinish() {
+    terminateGui();
     terminateBindGroup();
     terminateUniforms();
     terminateGeometry();
@@ -197,7 +204,7 @@ bool Application::initWindowAndDevice() {
     requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
     requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
     requiredLimits.limits.maxInterStageShaderComponents = 8; // color.rgb + normal.xyz + texelCoords.xy
-    requiredLimits.limits.maxBindGroups = 1;
+    requiredLimits.limits.maxBindGroups = 2;
     requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
     requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
     requiredLimits.limits.maxTextureDimension1D = 480;
@@ -597,6 +604,11 @@ void Application::onMouseMove(double xPos, double yPos) {
 }
 
 void Application::onMouseButton(int button, int action, int /* mouse event modifiers */) {
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.WantCaptureMouse) {
+        // Do not manipulate camera if interacting with UI components
+        return;
+    }
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         switch (action) {
         case GLFW_PRESS:
@@ -659,4 +671,59 @@ TextureView Application::getNextSurfaceTextureView()
     TextureView targetView = texture.createView(viewDescriptor);
 
     return targetView;
+}
+
+bool Application::initGui() {
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::GetIO();
+
+    ImGui_ImplGlfw_InitForOther(m_window, true);
+    ImGui_ImplWGPU_Init(m_device, 3, m_surfaceFormat, m_depthTextureFormat);
+    return true;
+}
+
+void Application::terminateGui() {
+    ImGui_ImplGlfw_Shutdown();
+    ImGui_ImplWGPU_Shutdown();
+}
+
+void Application::updateGui(RenderPassEncoder renderPass) {
+    // Initialize ImGui Frame
+    ImGui_ImplWGPU_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    //  Build UI components
+    static float f = 0.0f;
+    static int counter = 0;
+    static bool show_demo_window = true;
+    static bool show_another_window = false;
+    static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+    ImGui::Begin("Hello World!");
+
+    ImGui::Text("This is some useful text.");
+    ImGui::Checkbox("Demo Window", &show_demo_window);
+    ImGui::Checkbox("Another Demo Window", &show_another_window);
+
+    ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
+    ImGui::ColorEdit3("clear color", (float*)&clear_color);
+
+    if (ImGui::Button("Button")) {
+        counter++;
+    }
+    ImGui::SameLine();
+    ImGui::Text("Counter = %d", counter);
+
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::Text("Application averagge %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+    ImGui::End();
+
+    // Draw UI components
+    ImGui::EndFrame();
+    // Convert UI definitions into low level draw commands
+    ImGui::Render();
+    // Execute the low lelvel draw commands on the WebGPU backend
+    ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
 }
