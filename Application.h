@@ -12,6 +12,10 @@ public:
     void onFinish();
     bool isRunning();
 
+    void onMouseMove(double xPos, double yPos);
+    void onMouseButton(int button, int action, int mods);
+    void onScroll(double xOffset, double yOffset);
+
 private:
     bool initWindowAndDevice();
     void terminateWindowAndDevice();
@@ -37,6 +41,9 @@ private:
     void terminateBindGroup();
 
     void updateProjectionMatrix();
+    void updateViewMatrix();
+
+    void updateDragInertia();
 
     wgpu::TextureView getNextSurfaceTextureView();
 
@@ -56,6 +63,22 @@ private:
     };
 
     static_assert(sizeof(SharedUniforms) % 16 == 0);
+
+    struct CameraState {
+        vec2 angles = { 0.8f, 0.5f };
+        float zoom = -1.2f;
+    };
+
+    struct DragState {
+        bool active = false;
+        vec2 startPos;
+        CameraState startCameraState;
+        float sensitivity = 0.01f;
+        float scrollSensitivity = 0.1f;
+        vec2 velocity = {0.0, 0.0};
+        vec2 previousDelta;
+        float inertia = 0.9f;
+    };
 
     GLFWwindow* m_window = nullptr;
     wgpu::Instance m_instance = nullptr;
@@ -85,4 +108,7 @@ private:
     SharedUniforms m_uniforms;
 
     wgpu::BindGroup m_bindGroup = nullptr;
+
+    CameraState m_cameraState;
+    DragState m_drag;
 };

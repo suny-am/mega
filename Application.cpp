@@ -37,6 +37,7 @@ bool Application::onInit() {
 }
 
 void Application::onFrame() {
+    updateDragInertia();
     glfwPollEvents();
 
     TextureView nextTexture = getNextSurfaceTextureView();
@@ -157,12 +158,25 @@ bool Application::initWindowAndDevice() {
         return false;
     }
 
+    // Window callbacks
     glfwSetWindowUserPointer(m_window, this);
-    // lambda function to pass onResize by proxy to glfwSetFramebufferSizeCallback()
     glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int, int) {
         auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
         if (that != nullptr) that->onResize();
                                    });
+    glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xPos, double yPos) {
+        auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+        if (that != nullptr) that->onMouseMove(xPos, yPos);
+                             });
+    glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int button, int action, int mods) {
+        auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+        if (that != nullptr) that->onMouseButton(button, action, mods);
+                               });
+    glfwSetScrollCallback(m_window, [](GLFWwindow* window, double xOffset, double yOffset) {
+        auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+        if (that != nullptr) that->onScroll(xOffset, yOffset);
+                          });
+
 
     cout << "Requesting adapter..." << endl;
     m_surface = glfwGetWGPUSurface(m_instance, m_window);
@@ -502,6 +516,8 @@ bool Application::initUniforms() {
     m_uniforms.color = { 0.0f, 1.0f, 0.4f, 1.0f };
     m_queue.writeBuffer(m_uniformBuffer, 0, &m_uniforms, sizeof(SharedUniforms));
 
+    updateViewMatrix();
+
     return m_uniformBuffer != nullptr;
 }
 
@@ -550,6 +566,73 @@ void Application::updateProjectionMatrix() {
         &m_uniforms.projectionMatrix,
         sizeof(SharedUniforms::projectionMatrix)
     );
+}
+
+void Application::updateViewMatrix() {
+    float cx = cos(m_cameraState.angles.x);
+    float sx = sin(m_cameraState.angles.y);
+    float cy = cos(m_cameraState.angles.x);
+    float sy = sin(m_cameraState.angles.y);
+    vec3 position = vec3(cx * cy, sx * cy, sy) * std::exp(-m_cameraState.zoom);
+    m_uniforms.viewMatrix = glm::lookAt(position, vec3(0.0f), vec3(0, 0, 1));
+    m_queue.writeBuffer(
+        m_uniformBuffer,
+        offsetof(SharedUniforms, viewMatrix),
+        &m_uniforms.viewMatrix,
+        sizeof(SharedUniforms::viewMatrix)
+    );
+}
+
+void Application::onMouseMove(double xPos, double yPos) {
+    if (m_drag.active) {
+        vec2 currentPos = vec2(-(float)xPos, (float)yPos);
+        vec2 delta = (currentPos - m_drag.startPos) * m_drag.sensitivity;
+        m_cameraState.angles = m_drag.startCameraState.angles + delta;
+        // Clamp to avoid going too far when orbiting up/down (y/z plane)
+        m_cameraState.angles.y = glm::clamp(m_cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
+        updateViewMatrix();
+        m_drag.velocity = delta - m_drag.previousDelta;
+        m_drag.previousDelta = delta;
+    }
+}
+
+void Application::onMouseButton(int button, int action, int /* mouse event modifiers */) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        switch (action) {
+        case GLFW_PRESS:
+            m_drag.active = true;
+            double xPos, yPos;
+            glfwGetCursorPos(m_window, &xPos, &yPos);
+            m_drag.startPos = vec2(-(float)xPos, (float)yPos);
+            m_drag.startCameraState = m_cameraState;
+            break;
+        case GLFW_RELEASE:
+            m_drag.active = false;
+            break;
+        }
+    }
+}
+
+void Application::onScroll(double /* xOffset */, double yOffset) {
+    m_cameraState.zoom += m_drag.scrollSensitivity * static_cast<float>(yOffset);
+    m_cameraState.zoom = glm::clamp(m_cameraState.zoom, -2.0f, 2.0f);
+}
+
+void Application::updateDragInertia() {
+    constexpr float eps = 1e-4f;
+
+    // apply inertia only when the mouse button is released
+    if (!m_drag.active) {
+        // skip updating the velocity matrix when the velocity is no longer noticeable
+        if (std::abs(m_drag.velocity.x) < eps && std::abs(m_drag.velocity.y) < eps) {
+            return;
+        }
+        m_cameraState.angles += m_drag.velocity;
+        m_cameraState.angles.y = glm::clamp(m_cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
+        // Dampen the velocity by decreasing it exponentially over subsequent frames
+        m_drag.velocity *= m_drag.inertia;
+        updateViewMatrix();
+    }
 }
 
 TextureView Application::getNextSurfaceTextureView()
