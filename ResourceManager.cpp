@@ -105,8 +105,8 @@ bool ResourceManager::loadGeometryFromObj(const path& path, std::vector<VertexAt
         }
     }
 
+    populateTextureFrameAttributes(vertexData);
     return true;
-
 }
 
 Texture ResourceManager::loadTexture(const path& path, Device device, TextureView* pTextureView) {
@@ -142,6 +142,44 @@ Texture ResourceManager::loadTexture(const path& path, Device device, TextureVie
     }
 
     return texture;
+}
+
+void ResourceManager::populateTextureFrameAttributes(std::vector<VertexAttributes>& vertexData) {
+    size_t triangleCount = vertexData.size() / 3;
+    for (size_t t = 0; t < triangleCount; ++t) {
+        VertexAttributes* v = &vertexData[3 * t];
+
+        for (int k = 0; k < 3; ++k) {
+            mat3x3 TBN = computeTBN(v, v[k].normal);
+            v[k].tangent = TBN[0];
+            v[k].bitangent = TBN[1];
+            v[k].normal = TBN[2];
+        }
+    }
+}
+
+glm::mat3x3 ResourceManager::computeTBN(const VertexAttributes corners[3], const vec3& expectedN) {
+    vec3 ePos1 = corners[1].position - corners[0].position;
+    vec3 ePos2 = corners[2].position - corners[0].position;
+
+    vec2 eUV1 = corners[1].uv - corners[0].uv;
+    vec2 eUV2 = corners[2].uv - corners[0].uv;
+
+    vec3 T = normalize(ePos1 * eUV2.y - ePos2 * eUV1.y);
+    vec3 B = normalize(ePos2 * eUV1.x - ePos1 * eUV2.x);
+    vec3 N = cross(T, B);
+
+    if (dot(N, expectedN) < 0.0) {
+        T = -T;
+        B = -B;
+        N = -N;
+    }
+
+    N = expectedN;
+    T = normalize(T - dot(T, N) * N);
+    B = cross(N, T);
+
+    return mat3x3(T, B, N);
 }
 
 uint32_t bit_width(uint32_t m) {

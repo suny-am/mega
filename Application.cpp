@@ -30,7 +30,6 @@ using glm::euclidean;
 using glm::radians;
 using glm::value_ptr;
 
-
 using namespace wgpu;
 using VertexAttributes = ResourceManager::VertexAttributes;
 
@@ -51,7 +50,7 @@ bool Application::onInit() {
     if (!initDepthBuffer()) return false;
     if (!initBindGroupLayout()) return false;
     if (!initRenderPipeline()) return false;
-    if (!initTexture()) return false;
+    if (!initTextures()) return false;
     if (!initGeometry()) return false;
     if (!initUniforms()) return false;
     if (!initLightingUniforms()) return false;
@@ -161,7 +160,7 @@ void Application::onFinish() {
     terminateLightingUniforms();
     terminateUniforms();
     terminateGeometry();
-    terminateTexture();
+    terminateTextures();
     terminateRenderPipeline();
     terminateBindGroupLayout();
     terminateDepthBuffer();
@@ -204,18 +203,18 @@ bool Application::initWindowAndDevice() {
 
     cout << "Requesting device..." << endl;
     RequiredLimits requiredLimits = Default;
-    requiredLimits.limits.maxVertexAttributes = 4; // position, normal, color, uv
+    requiredLimits.limits.maxVertexAttributes = 6; // position, normal, color, uv, tangent, bitangent
     requiredLimits.limits.maxVertexBuffers = 1;
     requiredLimits.limits.maxBufferSize = 500000 * sizeof(VertexAttributes);
     requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
     requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
     requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
-    requiredLimits.limits.maxInterStageShaderComponents = 11; // color.rgb + normal.xyz + texelCoords.xy + viewDirection.xyz
+    requiredLimits.limits.maxInterStageShaderComponents = 17; // color.rgb + normal.xyz + texelCoords.xy + viewDirection.xyz + tangent.xyz + bitangent.xyz
     requiredLimits.limits.maxBindGroups = 2;
     requiredLimits.limits.maxUniformBuffersPerShaderStage = 2;
     requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
     requiredLimits.limits.maxTextureArrayLayers = 1;
-    requiredLimits.limits.maxSampledTexturesPerShaderStage = 1;
+    requiredLimits.limits.maxSampledTexturesPerShaderStage = 2;
     requiredLimits.limits.maxSamplersPerShaderStage = 1;
     requiredLimits.limits.maxTextureDimension1D = supportedLimits.limits.maxTextureDimension1D;
     requiredLimits.limits.maxTextureDimension2D = supportedLimits.limits.maxTextureDimension2D;
@@ -338,7 +337,7 @@ void Application::terminateDepthBuffer() {
 }
 
 bool Application::initBindGroupLayout() {
-    vector<BindGroupLayoutEntry> bindingLayoutEntries(4, Default);
+    vector<BindGroupLayoutEntry> bindingLayoutEntries(5, Default);
 
     BindGroupLayoutEntry& bindingLayout = bindingLayoutEntries[0];
     bindingLayout.binding = 0;
@@ -346,19 +345,25 @@ bool Application::initBindGroupLayout() {
     bindingLayout.buffer.type = BufferBindingType::Uniform;
     bindingLayout.buffer.minBindingSize = sizeof(SharedUniforms);
 
-    BindGroupLayoutEntry& textureBindingLayout = bindingLayoutEntries[1];
-    textureBindingLayout.binding = 1;
-    textureBindingLayout.visibility = ShaderStage::Fragment;
-    textureBindingLayout.texture.sampleType = TextureSampleType::Float;
-    textureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
+    BindGroupLayoutEntry& baseColorTextureBindingLayout = bindingLayoutEntries[1];
+    baseColorTextureBindingLayout.binding = 1;
+    baseColorTextureBindingLayout.visibility = ShaderStage::Fragment;
+    baseColorTextureBindingLayout.texture.sampleType = TextureSampleType::Float;
+    baseColorTextureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
 
-    BindGroupLayoutEntry& samplerBindingLayout = bindingLayoutEntries[2];
-    samplerBindingLayout.binding = 2;
+    BindGroupLayoutEntry& normalTextureBindingLayout = bindingLayoutEntries[2];
+    normalTextureBindingLayout.binding = 2;
+    normalTextureBindingLayout.visibility = ShaderStage::Fragment;
+    normalTextureBindingLayout.texture.sampleType = TextureSampleType::Float;
+    normalTextureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
+
+    BindGroupLayoutEntry& samplerBindingLayout = bindingLayoutEntries[3];
+    samplerBindingLayout.binding = 3;
     samplerBindingLayout.visibility = ShaderStage::Fragment;
     samplerBindingLayout.sampler.type = SamplerBindingType::Filtering;
 
-    BindGroupLayoutEntry& lightingUniformLayout = bindingLayoutEntries[3];
-    lightingUniformLayout.binding = 3;
+    BindGroupLayoutEntry& lightingUniformLayout = bindingLayoutEntries[4];
+    lightingUniformLayout.binding = 4;
     lightingUniformLayout.visibility = ShaderStage::Fragment;
     lightingUniformLayout.buffer.type = BufferBindingType::Uniform;
     lightingUniformLayout.buffer.minBindingSize = sizeof(LightingUniforms);
@@ -388,7 +393,7 @@ bool Application::initRenderPipeline() {
     pipelineDesc.label = "Render Pipeline";
 
     VertexBufferLayout vertexBufferLayout;
-    vector<VertexAttribute> vertexAttribs(4); // position, normal, color, uv
+    vector<VertexAttribute> vertexAttribs(6); // position, normal, color, uv, tangent, bitangent
 
     vertexAttribs[0].shaderLocation = 0;
     vertexAttribs[0].format = VertexFormat::Float32x3; //  xyz
@@ -405,6 +410,15 @@ bool Application::initRenderPipeline() {
     vertexAttribs[3].shaderLocation = 3;
     vertexAttribs[3].format = VertexFormat::Float32x2;
     vertexAttribs[3].offset = offsetof(VertexAttributes, uv);
+
+    vertexAttribs[4].shaderLocation = 4;
+    vertexAttribs[4].format = VertexFormat::Float32x3;
+    vertexAttribs[4].offset = offsetof(VertexAttributes, tangent);
+
+    vertexAttribs[5].shaderLocation = 5;
+    vertexAttribs[5].format = VertexFormat::Float32x3;
+    vertexAttribs[5].offset = offsetof(VertexAttributes, bitangent);
+
 
     vertexBufferLayout.attributeCount = static_cast<uint32_t>(vertexAttribs.size());
     vertexBufferLayout.attributes = vertexAttribs.data();
@@ -478,7 +492,7 @@ void Application::terminateRenderPipeline() {
     m_bindGroupLayout.release();
 }
 
-bool Application::initTexture() {
+bool Application::initTextures() {
     SamplerDescriptor samplerDesc;
     samplerDesc.addressModeU = AddressMode::Repeat;
     samplerDesc.addressModeV = AddressMode::Repeat;
@@ -492,27 +506,38 @@ bool Application::initTexture() {
     samplerDesc.maxAnisotropy = 1;
     m_sampler = m_device.createSampler(samplerDesc);
 
-    m_texture = ResourceManager::loadTexture(RESOURCE_DIR "/textures/fourareen2k_albedo.jpg", m_device, &m_textureView);
-    if (!m_texture) {
-        cerr << "Could not load texture!" << endl;
+    m_baseColorTexture = ResourceManager::loadTexture(RESOURCE_DIR "/textures/cobblestone_floor_08_diff_2k.jpg", m_device, &m_baseColorTextureView);
+    m_normalTexture = ResourceManager::loadTexture(RESOURCE_DIR "/textures/cobblestone_floor_08_nor_gl_2k.jpg", m_device, &m_normalTextureView);
+    if (!m_baseColorTexture) {
+        cerr << "Could not load diffuse texture!" << endl;
+        return false;
+    }
+    if (!m_normalTexture) {
+        cerr << "Could not load normal texture!" << endl;
+        return false;
     }
 
-    std::cout << "Texture: " << m_texture << std::endl;
-    std::cout << "Texture view: " << m_textureView << std::endl;
+    std::cout << "Diffuse Texture: " << m_baseColorTexture << std::endl;
+    std::cout << "Diffuse Texture view: " << m_baseColorTextureView << std::endl;
+    std::cout << "Normal Texture: " << m_normalTexture << std::endl;
+    std::cout << "Normal Texture view: " << m_normalTextureView << std::endl;
 
     return m_sampler != nullptr;
 }
 
-void Application::terminateTexture() {
-    m_textureView.release();
-    m_texture.destroy();
-    m_texture.release();
+void Application::terminateTextures() {
+    m_baseColorTextureView.release();
+    m_baseColorTexture.destroy();
+    m_baseColorTexture.release();
+    m_normalTextureView.release();
+    m_normalTexture.destroy();
+    m_normalTextureView.release();
     m_sampler.release();
 }
 
 bool Application::initGeometry() {
     vector<VertexAttributes> vertexData;
-    bool success = ResourceManager::loadGeometryFromObj(RESOURCE_DIR "/models/fourareen.obj", vertexData);
+    bool success = ResourceManager::loadGeometryFromObj(RESOURCE_DIR "/models/cylinder.obj", vertexData);
     if (!success) {
         std::cerr << "Could not load geometry!" << endl;
     }
@@ -590,7 +615,7 @@ void Application::updateLightingUniforms() {
 }
 
 bool Application::initBindGroup() {
-    vector<BindGroupEntry> bindings(4);
+    vector<BindGroupEntry> bindings(5);
 
     bindings[0].binding = 0;
     bindings[0].buffer = m_uniformBuffer;
@@ -598,15 +623,18 @@ bool Application::initBindGroup() {
     bindings[0].size = sizeof(SharedUniforms);
 
     bindings[1].binding = 1;
-    bindings[1].textureView = m_textureView;
+    bindings[1].textureView = m_baseColorTextureView;
 
     bindings[2].binding = 2;
-    bindings[2].sampler = m_sampler;
+    bindings[2].textureView = m_normalTextureView;
 
     bindings[3].binding = 3;
-    bindings[3].buffer = m_lightingUniformBuffer;
-    bindings[3].offset = 0;
-    bindings[3].size = sizeof(LightingUniforms);
+    bindings[3].sampler = m_sampler;
+
+    bindings[4].binding = 4;
+    bindings[4].buffer = m_lightingUniformBuffer;
+    bindings[4].offset = 0;
+    bindings[4].size = sizeof(LightingUniforms);
 
     BindGroupDescriptor bindGroupDesc;
     bindGroupDesc.layout = m_bindGroupLayout;
@@ -753,6 +781,8 @@ void Application::updateGui(RenderPassEncoder renderPass) {
         changed = ImGui::SliderFloat("Hardness", &m_lightingUniforms.hardness, 1.0f, 100.0f) || changed;
         changed = ImGui::SliderFloat("Diffuse", &m_lightingUniforms.kd, 0.0f, 1.0f) || changed;
         changed = ImGui::SliderFloat("Specular", &m_lightingUniforms.ks, 0.0f, 1.0f) || changed;
+        changed = ImGui::SliderFloat("Normal", &m_lightingUniforms.kn, 0.0f, 1.0f) || changed;
+         
         ImGui::End();
         m_lightningUniformsChanged = changed;
     }

@@ -33,8 +33,8 @@ private:
     bool initRenderPipeline();
     void terminateRenderPipeline();
 
-    bool initTexture();
-    void terminateTexture();
+    bool initTextures();
+    void terminateTextures();
 
     bool initGeometry();
     void terminateGeometry();
@@ -81,7 +81,7 @@ private:
         float hardness = 32.0f;
         float kd = 1.0f;
         float ks = 0.5f;
-        float _pad[1];
+        float kn = 0.5f;
     };
     static_assert(sizeof(LightingUniforms) % 16 == 0);
 
@@ -119,8 +119,10 @@ private:
     RenderPipeline m_pipeline = nullptr;
 
     Sampler m_sampler = nullptr;
-    Texture m_texture = nullptr;
-    TextureView m_textureView = nullptr;
+    Texture m_baseColorTexture = nullptr;
+    TextureView m_baseColorTextureView = nullptr;
+    Texture m_normalTexture = nullptr;
+    TextureView m_normalTextureView = nullptr;
 
     Buffer m_vertexBuffer = nullptr;
     int m_vertexCount = 0;

@@ -9,12 +9,14 @@ using namespace wgpu;
 class ResourceManager {
 public:
     using path = std::filesystem::path;
+    using mat3x3 = glm::mat3x3;
     using vec3 = glm::vec3;
     using vec2 = glm::vec2;
 
-
     struct VertexAttributes {
         vec3 position;
+        vec3 tangent;
+        vec3 bitangent;
         vec3 normal;
         vec3 color;
         vec2 uv;
@@ -25,4 +27,8 @@ public:
     static bool loadGeometryFromObj(const path& path, std::vector<VertexAttributes>& vertexData);
 
     static Texture loadTexture(const path& path, Device device, TextureView* pTextureView = nullptr);
+
+private:
+    static mat3x3 computeTBN(const VertexAttributes corners[3], const vec3& expectedN);
+    static void populateTextureFrameAttributes(std::vector<VertexAttributes>& vertexData);
 };

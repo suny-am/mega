@@ -241,7 +241,13 @@ See the [open issues](https://github.com/suny-am/learn-webgpu/issues) for a full
 
 ### textures
 
+- [cobblestone_floor_08_diff_2k.jpg](https://eliemichel.github.io/LearnWebGPU/_downloads/c69c56204b32f85418889a40235cf7f5/cobblestone_floor_08_diff_2k.jpg)
+- [cobblestone_floor_08_nor_gl_2k.png](https://eliemichel.github.io/LearnWebGPU/_downloads/5d69b9dffba8a2649b8c223d042347b7/cobblestone_floor_08_nor_gl_2k.png)
+
 ### models
+
+- [plane.obj](https://eliemichel.github.io/LearnWebGPU/_downloads/4336d1767fec66e6d2c5aca98e086357/plane.obj)
+- [cylinder.obj](https://eliemichel.github.io/LearnWebGPU/_downloads/a807bbb5c9ad69e555e25d70b1fcf26e/cylinder.obj)
 
 ### shaders
 
