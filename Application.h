@@ -51,9 +51,6 @@ private:
 
     void updateProjectionMatrix();
     void updateViewMatrix();
-
-    void updateLighting();
-
     void updateDragInertia();
 
     TextureView getNextSurfaceTextureView();
@@ -73,14 +70,18 @@ private:
         mat4x4 viewMatrix;
         mat4x4 modelMatrix;
         vec4 color;
+        vec3 cameraWorldPosition;
         float time;
-        float _pad[3];
     };
     static_assert(sizeof(SharedUniforms) % 16 == 0);
 
     struct LightingUniforms {
         std::array<vec4, 2> directions;
         std::array<vec4, 2> colors;
+        float hardness = 32.0f;
+        float kd = 1.0f;
+        float ks = 0.5f;
+        float _pad[1];
     };
     static_assert(sizeof(LightingUniforms) % 16 == 0);
 
@@ -95,7 +96,7 @@ private:
         CameraState startCameraState;
         float sensitivity = 0.01f;
         float scrollSensitivity = 0.1f;
-        vec2 velocity = {0.0, 0.0};
+        vec2 velocity = { 0.0, 0.0 };
         vec2 previousDelta;
         float inertia = 0.9f;
     };

@@ -3,8 +3,8 @@
 #include <webgpu/webgpu.hpp>
 #include <glm/glm.hpp>
 #include <glm/ext.hpp>
-#include "headers/tiny_obj_loader.h"
-#include "headers/stb_image.h"
+#include "resource-loaders/tiny_obj_loader.h"
+#include "resource-loaders/stb_image.h"
 #include <filesystem>
 #include <fstream>
 

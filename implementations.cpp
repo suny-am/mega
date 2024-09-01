@@ -3,7 +3,7 @@
 #include "webgpu/webgpu.hpp"
 // TinyOBJLoader
 #define TINYOBJLOADER_IMPLEMENTATION
-#include "headers/tiny_obj_loader.h"
+#include "resource-loaders/tiny_obj_loader.h"
 // STB Image 
 #define STB_IMAGE_IMPLEMENTATION
-#include "headers/stb_image.h"
+#include "resource-loaders/stb_image.h"

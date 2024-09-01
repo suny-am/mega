@@ -210,29 +210,16 @@ bool Application::initWindowAndDevice() {
     requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
     requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
     requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
-    requiredLimits.limits.maxInterStageShaderComponents = 8; // color.rgb + normal.xyz + texelCoords.xy
+    requiredLimits.limits.maxInterStageShaderComponents = 11; // color.rgb + normal.xyz + texelCoords.xy + viewDirection.xyz
     requiredLimits.limits.maxBindGroups = 2;
     requiredLimits.limits.maxUniformBuffersPerShaderStage = 2;
     requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
-    requiredLimits.limits.maxTextureDimension1D = 480;
-    requiredLimits.limits.maxTextureDimension2D = 640;
     requiredLimits.limits.maxTextureArrayLayers = 1;
     requiredLimits.limits.maxSampledTexturesPerShaderStage = 1;
     requiredLimits.limits.maxSamplersPerShaderStage = 1;
-
-    int maxTexDimensions = 2048;
-    int monitorCount;
-    GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
-    for (int mi = 0; mi < monitorCount; ++mi) {
-        int w_width, w_height;
-        glfwGetMonitorWorkarea(monitors[mi], nullptr, nullptr, &w_width, &w_height);
-        if (maxTexDimensions < w_width) {
-            maxTexDimensions = w_width;
-            cout << "Updating max texture dimensions; new max: " << maxTexDimensions << "x" << maxTexDimensions << endl;
-        }
-    }
-    requiredLimits.limits.maxTextureDimension1D = maxTexDimensions;
-    requiredLimits.limits.maxTextureDimension2D = maxTexDimensions;
+    requiredLimits.limits.maxTextureDimension1D = supportedLimits.limits.maxTextureDimension1D;
+    requiredLimits.limits.maxTextureDimension2D = supportedLimits.limits.maxTextureDimension2D;
+    requiredLimits.limits.maxTextureDimension3D = supportedLimits.limits.maxTextureDimension3D;
 
     DeviceDescriptor m_deviceDesc = {};
     m_deviceDesc.label = "WGPU Device";
@@ -390,7 +377,11 @@ void Application::terminateBindGroupLayout() {
 
 bool Application::initRenderPipeline() {
     cout << "Creating shader module..." << endl;
-    m_shaderModule = ResourceManager::loadShaderModule(RESOURCE_DIR "/shader.wgsl", m_device);
+    m_shaderModule = ResourceManager::loadShaderModule(RESOURCE_DIR "/shaders/shader.wgsl", m_device);
+    if (!m_shaderModule) {
+        cerr << "Could not load shader from specified path" << endl;
+        return false;
+    }
     cout << "Shader module: " << m_shaderModule << endl;
 
     RenderPipelineDescriptor pipelineDesc;
@@ -501,7 +492,7 @@ bool Application::initTexture() {
     samplerDesc.maxAnisotropy = 1;
     m_sampler = m_device.createSampler(samplerDesc);
 
-    m_texture = ResourceManager::loadTexture(RESOURCE_DIR "/fourareen2k_albedo.jpg", m_device, &m_textureView);
+    m_texture = ResourceManager::loadTexture(RESOURCE_DIR "/textures/fourareen2k_albedo.jpg", m_device, &m_textureView);
     if (!m_texture) {
         cerr << "Could not load texture!" << endl;
     }
@@ -521,7 +512,7 @@ void Application::terminateTexture() {
 
 bool Application::initGeometry() {
     vector<VertexAttributes> vertexData;
-    bool success = ResourceManager::loadGeometryFromObj(RESOURCE_DIR "/fourareen.obj", vertexData);
+    bool success = ResourceManager::loadGeometryFromObj(RESOURCE_DIR "/models/fourareen.obj", vertexData);
     if (!success) {
         std::cerr << "Could not load geometry!" << endl;
     }
@@ -561,6 +552,7 @@ bool Application::initUniforms() {
     m_uniforms.color = { 0.0f, 1.0f, 0.4f, 1.0f };
     m_queue.writeBuffer(m_uniformBuffer, 0, &m_uniforms, sizeof(SharedUniforms));
 
+    updateProjectionMatrix();
     updateViewMatrix();
 
     return m_uniformBuffer != nullptr;
@@ -650,6 +642,7 @@ void Application::updateViewMatrix() {
     float cy = cos(m_cameraState.angles.x);
     float sy = sin(m_cameraState.angles.y);
     vec3 position = vec3(cx * cy, sx * cy, sy) * std::exp(-m_cameraState.zoom);
+
     m_uniforms.viewMatrix = glm::lookAt(position, vec3(0.0f), vec3(0, 0, 1));
     m_queue.writeBuffer(
         m_uniformBuffer,
@@ -657,13 +650,14 @@ void Application::updateViewMatrix() {
         &m_uniforms.viewMatrix,
         sizeof(SharedUniforms::viewMatrix)
     );
-}
 
-void Application::updateLighting() {
-    if(m_lightningUniformsChanged) {
-        // [...] Update m_lightUniforms
-        m_lightningUniformsChanged = false;
-    }
+    m_uniforms.cameraWorldPosition = position;
+    m_queue.writeBuffer(
+        m_uniformBuffer,
+        offsetof(SharedUniforms, cameraWorldPosition),
+        &m_uniforms.cameraWorldPosition,
+        sizeof(SharedUniforms::cameraWorldPosition)
+    );
 }
 
 void Application::onMouseMove(double xPos, double yPos) {
@@ -704,6 +698,7 @@ void Application::onMouseButton(int button, int action, int /* mouse event modif
 void Application::onScroll(double /* xOffset */, double yOffset) {
     m_cameraState.zoom += m_drag.scrollSensitivity * static_cast<float>(yOffset);
     m_cameraState.zoom = glm::clamp(m_cameraState.zoom, -2.0f, 2.0f);
+    updateViewMatrix();
 }
 
 void Application::updateDragInertia() {
@@ -721,6 +716,53 @@ void Application::updateDragInertia() {
         m_drag.velocity *= m_drag.inertia;
         updateViewMatrix();
     }
+}
+
+bool Application::initGui() {
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::GetIO();
+
+    ImGui_ImplGlfw_InitForOther(m_window, true);
+    ImGui_ImplWGPU_Init(m_device, 3, m_surfaceFormat, m_depthTextureFormat);
+    return true;
+}
+
+void Application::terminateGui() {
+    ImGui_ImplGlfw_Shutdown();
+    ImGui_ImplWGPU_Shutdown();
+}
+
+void Application::updateGui(RenderPassEncoder renderPass) {
+    // Initialize ImGui Frame
+    ImGui_ImplWGPU_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    {
+        bool changed = false;
+        ImGui::Begin("Camera");
+        ImGui::Text("Zoom: %f", m_cameraState.zoom);
+        ImGui::Text("Angle: %f", m_cameraState.angles.g);
+        ImGui::End();
+        ImGui::Begin("Lighting");
+        changed = ImGui::ColorEdit3("Color #0", glm::value_ptr(m_lightingUniforms.colors[0]));
+        changed = ImGui::DragDirection("Direction #0", m_lightingUniforms.directions[0]) || changed;
+        changed = ImGui::ColorEdit3("Color #1", glm::value_ptr(m_lightingUniforms.colors[1]));
+        changed = ImGui::DragDirection("Direction #1", m_lightingUniforms.directions[1]) || changed;
+        changed = ImGui::SliderFloat("Hardness", &m_lightingUniforms.hardness, 1.0f, 100.0f) || changed;
+        changed = ImGui::SliderFloat("Diffuse", &m_lightingUniforms.kd, 0.0f, 1.0f) || changed;
+        changed = ImGui::SliderFloat("Specular", &m_lightingUniforms.ks, 0.0f, 1.0f) || changed;
+        ImGui::End();
+        m_lightningUniformsChanged = changed;
+    }
+
+    // Draw UI components
+    ImGui::EndFrame();
+    // Convert UI definitions into low level draw commands
+    ImGui::Render();
+    // Execute the low lelvel draw commands on the WebGPU backend
+    ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
 }
 
 TextureView Application::getNextSurfaceTextureView()
@@ -747,44 +789,4 @@ TextureView Application::getNextSurfaceTextureView()
     TextureView targetView = texture.createView(viewDescriptor);
 
     return targetView;
-}
-
-bool Application::initGui() {
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGui::GetIO();
-
-    ImGui_ImplGlfw_InitForOther(m_window, true);
-    ImGui_ImplWGPU_Init(m_device, 3, m_surfaceFormat, m_depthTextureFormat);
-    return true;
-}
-
-void Application::terminateGui() {
-    ImGui_ImplGlfw_Shutdown();
-    ImGui_ImplWGPU_Shutdown();
-}
-
-void Application::updateGui(RenderPassEncoder renderPass) {
-    // Initialize ImGui Frame
-    ImGui_ImplWGPU_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    {
-        bool changed = false;
-        ImGui::Begin("Lighting");
-        ImGui::ColorEdit3("Color #0", glm::value_ptr(m_lightingUniforms.colors[0]));
-        ImGui::DragDirection("Direction #0", m_lightingUniforms.directions[0]) || changed;
-        ImGui::ColorEdit3("Color #1", glm::value_ptr(m_lightingUniforms.colors[1]));
-        ImGui::DragDirection("Direction #1", m_lightingUniforms.directions[1]) || changed;
-        ImGui::End();
-        m_lightningUniformsChanged = changed;
-    }
-
-    // Draw UI components
-    ImGui::EndFrame();
-    // Convert UI definitions into low level draw commands
-    ImGui::Render();
-    // Execute the low lelvel draw commands on the WebGPU backend
-    ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
 }
