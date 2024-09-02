@@ -18,7 +18,8 @@ public:
         vec3 tangent;
         vec3 bitangent;
         vec3 normal;
-        vec3 color;
+        vec3 worldColor;
+        vec3 objectColor;
         vec2 uv;
     };
 

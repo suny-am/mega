@@ -84,7 +84,7 @@ void Application::onFrame() {
     renderPassColorAttachment.resolveTarget = nullptr;
     renderPassColorAttachment.loadOp = LoadOp::Clear;
     renderPassColorAttachment.storeOp = StoreOp::Store;
-    renderPassColorAttachment.clearValue = Color{ 0.05, 0.05, 0.05, 1.0 };
+    renderPassColorAttachment.clearValue = Color{ m_uniforms.worldColor.r, m_uniforms.worldColor.g, m_uniforms.worldColor.b, m_uniforms.worldColor.a };
 #ifndef WEBGPU_BACKEND_WGPU
     renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
 #endif // NOT WEBGPU_BACKEND_WGPU
@@ -202,13 +202,13 @@ bool Application::initWindowAndDevice() {
 
     cout << "Requesting device..." << endl;
     RequiredLimits requiredLimits = Default;
-    requiredLimits.limits.maxVertexAttributes = 6; // position, normal, color, uv, tangent, bitangent
+    requiredLimits.limits.maxVertexAttributes = 7; // position, normal, worldColor, objectColor, uv, tangent, bitangent
     requiredLimits.limits.maxVertexBuffers = 1;
     requiredLimits.limits.maxBufferSize = 500000 * sizeof(VertexAttributes);
     requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
     requiredLimits.limits.minUniformBufferOffsetAlignment = supportedLimits.limits.minUniformBufferOffsetAlignment;
     requiredLimits.limits.minStorageBufferOffsetAlignment = supportedLimits.limits.minStorageBufferOffsetAlignment;
-    requiredLimits.limits.maxInterStageShaderComponents = 17; // color.rgb + normal.xyz + texelCoords.xy + viewDirection.xyz + tangent.xyz + bitangent.xyz
+    requiredLimits.limits.maxInterStageShaderComponents = 20; // worldColor.rgb + objectColor.rgb + normal.xyz + texelCoords.xy + viewDirection.xyz + tangent.xyz + bitangent.xyz
     requiredLimits.limits.maxBindGroups = 2;
     requiredLimits.limits.maxUniformBuffersPerShaderStage = 2;
     requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
@@ -392,10 +392,10 @@ bool Application::initRenderPipeline() {
     pipelineDesc.label = "Render Pipeline";
 
     VertexBufferLayout vertexBufferLayout;
-    vector<VertexAttribute> vertexAttribs(6); // position, normal, color, uv, tangent, bitangent
+    vector<VertexAttribute> vertexAttribs(7); // position, normal, color, uv, tangent, bitangent
 
     vertexAttribs[0].shaderLocation = 0;
-    vertexAttribs[0].format = VertexFormat::Float32x3; //  xyz
+    vertexAttribs[0].format = VertexFormat::Float32x3;
     vertexAttribs[0].offset = offsetof(VertexAttributes, position);
 
     vertexAttribs[1].shaderLocation = 1;
@@ -404,19 +404,23 @@ bool Application::initRenderPipeline() {
 
     vertexAttribs[2].shaderLocation = 2;
     vertexAttribs[2].format = VertexFormat::Float32x3;
-    vertexAttribs[2].offset = offsetof(VertexAttributes, color);
+    vertexAttribs[2].offset = offsetof(VertexAttributes, worldColor);
 
     vertexAttribs[3].shaderLocation = 3;
-    vertexAttribs[3].format = VertexFormat::Float32x2;
-    vertexAttribs[3].offset = offsetof(VertexAttributes, uv);
+    vertexAttribs[3].format = VertexFormat::Float32x3;
+    vertexAttribs[3].offset = offsetof(VertexAttributes, objectColor);
 
     vertexAttribs[4].shaderLocation = 4;
-    vertexAttribs[4].format = VertexFormat::Float32x3;
-    vertexAttribs[4].offset = offsetof(VertexAttributes, tangent);
+    vertexAttribs[4].format = VertexFormat::Float32x2;
+    vertexAttribs[4].offset = offsetof(VertexAttributes, uv);
 
     vertexAttribs[5].shaderLocation = 5;
     vertexAttribs[5].format = VertexFormat::Float32x3;
-    vertexAttribs[5].offset = offsetof(VertexAttributes, bitangent);
+    vertexAttribs[5].offset = offsetof(VertexAttributes, tangent);
+
+    vertexAttribs[6].shaderLocation = 6;
+    vertexAttribs[6].format = VertexFormat::Float32x3;
+    vertexAttribs[6].offset = offsetof(VertexAttributes, bitangent);
 
 
     vertexBufferLayout.attributeCount = static_cast<uint32_t>(vertexAttribs.size());
@@ -582,7 +586,8 @@ bool Application::initUniforms() {
     m_uniforms.viewMatrix = glm::lookAt(vec3(-2.0f, -3.0f, 2.0f), vec3(0.0f), vec3(0, 0, 1));
     m_uniforms.projectionMatrix = glm::perspective(45 * PI / 180, 640.0f / 480.0f, 0.01f, 100.0f);
     m_uniforms.time = 1.0f;
-    m_uniforms.color = { 0.0f, 1.0f, 0.4f, 1.0f };
+    m_uniforms.worldColor = { 0.05f, 0.05f, 0.05f, 1.0f };
+    m_uniforms.objectColor = { 0.0f, 1.0f, 0.4f, 1.0f };
     m_queue.writeBuffer(m_uniformBuffer, 0, &m_uniforms, sizeof(SharedUniforms));
 
     updateProjectionMatrix();
@@ -795,7 +800,7 @@ void Application::updateGui(RenderPassEncoder renderPass) {
         }
         ImGui::End();
         ImGui::Begin("Lighting");
-        /* TBD ADD WORLD COLOR EDIT */
+        changed = ImGui::ColorEdit3("World", glm::value_ptr(m_uniforms.worldColor));
         changed = ImGui::ColorEdit3("Color #0", glm::value_ptr(m_lightingUniforms.colors[0]));
         changed = ImGui::DragDirection("Direction #0", m_lightingUniforms.directions[0]) || changed;
         changed = ImGui::ColorEdit3("Color #1", glm::value_ptr(m_lightingUniforms.colors[1]));
