@@ -63,6 +63,8 @@ private:
     void terminateGui();
     void updateGui(RenderPassEncoder renderPass);
 
+    bool createWindow();
+
 private:
     using mat4x4 = glm::mat4x4;
     using vec4 = glm::vec4;

@@ -185,9 +185,8 @@ bool Application::initWindowAndDevice() {
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    m_window = glfwCreateWindow(640, 480, "Learn WebGPU", nullptr, nullptr);
-    if (!m_window) {
-        cerr << "Could not create window" << endl;
+
+    if (!createWindow()) {
         return false;
     }
 
@@ -816,6 +815,20 @@ void Application::updateGui(RenderPassEncoder renderPass) {
     ImGui::Render();
     // Execute the low lelvel draw commands on the WebGPU backend
     ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
+}
+
+bool Application::createWindow() {
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+
+    int mWidth, mHeight;
+    glfwGetMonitorWorkarea(monitor, nullptr, nullptr, &mWidth, &mHeight);
+
+    m_window = glfwCreateWindow(mWidth, mHeight, "Development Window", nullptr, nullptr);
+    if (!m_window) {
+        cerr << "Could not create window" << endl;
+        return false;
+    }
+    return true;
 }
 
 TextureView Application::getNextSurfaceTextureView()
