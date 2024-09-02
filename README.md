@@ -20,11 +20,10 @@
   <p align="center">
     Mega (render engine)
     <br />
-    <a href="https://github.com/suny-am/mega"><strong>Explore the docs »</strong></a>
+    <!-- <a href="https://github.com/suny-am/mega"><strong>Explore the docs »</strong></a> -->
     <br />
-    <br />
-    <a href="https://github.com/suny-am/mega">View Demo</a>
-    ·
+    <!-- <a href="https://github.com/suny-am/mega">View Demo</a>
+    · -->
     <a href="https://github.com/suny-am/mega/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
     ·
     <a href="https://github.com/suny-am/mega/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
@@ -183,17 +182,28 @@ gh pr create
 
 Use this space to show useful examples of how a project can be used. Additional screenshots, code examples and demos work well in this space. You may also link to more resources.
 
-_For more examples, please refer to the [Documentation](https://example.com)_
+TBD
 
 <p align="right"><a href="#readme-top">🔝</a></p>
 
 <!-- ROADMAP -->
 ## Roadmap
 
+- [x] Basic render pipeline
+- [x] Read geometry from file
+- [x] Read texture from file
+- [ ] Dynamics
+  - [x] World color
+  - [x] Diffuse
+  - [x] Specular
+  - [x] Normal
+  - [x] Lighting
+- [x] Dear ImGui integration
+- [ ] Camera control
+  - [x] Orbit (turntable)
+  - [x] Zoom
+  - [ ] Pan
 - [ ] TBD
-  -
-
-See the [open issues](https://github.com/suny-am/mega/issues) for a full list of proposed features (and known issues).
 
 <p align="right"><a href="#readme-top">🔝</a></p>
 
@@ -210,7 +220,7 @@ See the [open issues](https://github.com/suny-am/mega/issues) for a full list of
 
 - [plane.obj](https://eliemichel.github.io/LearnWebGPU/_downloads/4336d1767fec66e6d2c5aca98e086357/plane.obj)
 - [cylinder.obj](https://eliemichel.github.io/LearnWebGPU/_downloads/a807bbb5c9ad69e555e25d70b1fcf26e/cylinder.obj)
-- [fourareen (Scottish Maritim Museum assets)](https://eliemichel.github.io/LearnWebGPU/_downloads/b191c7338d2723dd56474556616f5411/fourareen.zip)
+- [fourareen.zip (Scottish Maritim Museum assets)](https://eliemichel.github.io/LearnWebGPU/_downloads/b191c7338d2723dd56474556616f5411/fourareen.zip)
 
 ### shaders
 
