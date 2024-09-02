@@ -7,6 +7,7 @@
 #include "resource-loaders/stb_image.h"
 #include <filesystem>
 #include <fstream>
+#include <nfd.h>
 
 using std::cout;
 using std::cerr;
@@ -142,6 +143,34 @@ Texture ResourceManager::loadTexture(const path& path, Device device, TextureVie
     }
 
     return texture;
+}
+
+ResourceManager::path ResourceManager::loadGeometryFromFile() {
+    NFD_Init();
+
+    nfdu8char_t* outPath;
+    nfdu8filteritem_t filters[1] = { { "Model file", "obj" } };
+    nfdopendialogu8args_t args = { };
+    args.filterList = filters;
+    args.filterCount = 1;
+    nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
+    path modelPath;
+    if (result == NFD_OKAY)
+    {
+        modelPath = outPath;
+        NFD_FreePathU8(outPath);
+    }
+    else if (result == NFD_CANCEL)
+    {
+        puts("File load operation cancelled.");
+    }
+    else
+    {
+        printf("File Error: %s\n", NFD_GetError());
+    }
+
+    NFD_Quit();
+    return modelPath;
 }
 
 void ResourceManager::populateTextureFrameAttributes(std::vector<VertexAttributes>& vertexData) {

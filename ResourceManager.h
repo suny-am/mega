@@ -28,6 +28,8 @@ public:
 
     static Texture loadTexture(const path& path, Device device, TextureView* pTextureView = nullptr);
 
+    static path loadGeometryFromFile();
+
 private:
     static mat3x3 computeTBN(const VertexAttributes corners[3], const vec3& expectedN);
     static void populateTextureFrameAttributes(std::vector<VertexAttributes>& vertexData);

@@ -18,6 +18,7 @@ endif()
 add_subdirectory(glfw3webgpu)
 add_subdirectory(webgpu)
 add_subdirectory(imgui)
+add_subdirectory(nativefiledialog-extended)
 
 add_executable(App Implementations.cpp ResourceManager.h ResourceManager.cpp
                    Application.h Application.cpp main.cpp)
@@ -34,7 +35,7 @@ target_compile_definitions(App PRIVATE GLM_FORCE_DEPTH_ZERO_TONE=1
 
 target_include_directories(App PRIVATE .)
 
-target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu imgui)
+target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu imgui nfd)
 
 target_treat_all_warnings_as_errors(App)
 target_copy_webgpu_binaries(App)

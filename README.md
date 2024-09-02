@@ -248,6 +248,7 @@ See the [open issues](https://github.com/suny-am/learn-webgpu/issues) for a full
 
 - [plane.obj](https://eliemichel.github.io/LearnWebGPU/_downloads/4336d1767fec66e6d2c5aca98e086357/plane.obj)
 - [cylinder.obj](https://eliemichel.github.io/LearnWebGPU/_downloads/a807bbb5c9ad69e555e25d70b1fcf26e/cylinder.obj)
+- [fourareen (Scottish Maritim Museum assets)](https://eliemichel.github.io/LearnWebGPU/_downloads/b191c7338d2723dd56474556616f5411/fourareen.zip)
 
 ### shaders
 

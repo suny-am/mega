@@ -51,7 +51,7 @@ bool Application::onInit() {
     if (!initBindGroupLayout()) return false;
     if (!initRenderPipeline()) return false;
     if (!initTextures()) return false;
-    if (!initGeometry()) return false;
+    if (!initGeometry(RESOURCE_DIR "/models/fourareen.obj")) return false;
     if (!initUniforms()) return false;
     if (!initLightingUniforms()) return false;
     if (!initBindGroup()) return false;
@@ -506,8 +506,8 @@ bool Application::initTextures() {
     samplerDesc.maxAnisotropy = 1;
     m_sampler = m_device.createSampler(samplerDesc);
 
-    m_baseColorTexture = ResourceManager::loadTexture(RESOURCE_DIR "/textures/cobblestone_floor_08_diff_2k.jpg", m_device, &m_baseColorTextureView);
-    m_normalTexture = ResourceManager::loadTexture(RESOURCE_DIR "/textures/cobblestone_floor_08_nor_gl_2k.jpg", m_device, &m_normalTextureView);
+    m_baseColorTexture = ResourceManager::loadTexture(RESOURCE_DIR "/textures/fourareen2K_albedo.jpg", m_device, &m_baseColorTextureView);
+    m_normalTexture = ResourceManager::loadTexture(RESOURCE_DIR "/textures/fourareen2K_normals.png", m_device, &m_normalTextureView);
     if (!m_baseColorTexture) {
         cerr << "Could not load diffuse texture!" << endl;
         return false;
@@ -517,10 +517,10 @@ bool Application::initTextures() {
         return false;
     }
 
-    std::cout << "Diffuse Texture: " << m_baseColorTexture << std::endl;
-    std::cout << "Diffuse Texture view: " << m_baseColorTextureView << std::endl;
-    std::cout << "Normal Texture: " << m_normalTexture << std::endl;
-    std::cout << "Normal Texture view: " << m_normalTextureView << std::endl;
+    cout << "Diffuse Texture: " << m_baseColorTexture << endl;
+    cout << "Diffuse Texture view: " << m_baseColorTextureView << endl;
+    cout << "Normal Texture: " << m_normalTexture << endl;
+    cout << "Normal Texture view: " << m_normalTextureView << endl;
 
     return m_sampler != nullptr;
 }
@@ -535,11 +535,12 @@ void Application::terminateTextures() {
     m_sampler.release();
 }
 
-bool Application::initGeometry() {
+bool Application::initGeometry(const path& path) {
     vector<VertexAttributes> vertexData;
-    bool success = ResourceManager::loadGeometryFromObj(RESOURCE_DIR "/models/cylinder.obj", vertexData);
+    cout << "loading geometry from path: " << path << endl;
+    bool success = ResourceManager::loadGeometryFromObj(path, vertexData);
     if (!success) {
-        std::cerr << "Could not load geometry!" << endl;
+        cerr << "Could not load geometry!" << endl;
     }
 
     BufferDescriptor bufferDesc;
@@ -553,7 +554,15 @@ bool Application::initGeometry() {
 
     m_vertexCount = static_cast<int>(vertexData.size());
 
+    cout << "Vertex Buffer: " << m_vertexBuffer << endl;
+
     return m_vertexBuffer != nullptr;
+}
+
+void Application::updateGeometry(const path& path) {
+    m_vertexBuffer.destroy();
+    /* TBD UNSET TEXTURE WHEN LOADING NEW MODEL THAT IS NOT THE SAME */
+    initGeometry(path);
 }
 
 void Application::terminateGeometry() {
@@ -666,8 +675,8 @@ void Application::updateProjectionMatrix() {
 
 void Application::updateViewMatrix() {
     float cx = cos(m_cameraState.angles.x);
-    float sx = sin(m_cameraState.angles.y);
-    float cy = cos(m_cameraState.angles.x);
+    float sx = sin(m_cameraState.angles.x);
+    float cy = cos(m_cameraState.angles.y);
     float sy = sin(m_cameraState.angles.y);
     vec3 position = vec3(cx * cy, sx * cy, sy) * std::exp(-m_cameraState.zoom);
 
@@ -773,7 +782,21 @@ void Application::updateGui(RenderPassEncoder renderPass) {
         ImGui::Text("Zoom: %f", m_cameraState.zoom);
         ImGui::Text("Angle: %f", m_cameraState.angles.g);
         ImGui::End();
+        ImGui::Begin("File");
+        if (ImGui::BeginMenu("Model")) {
+            if (ImGui::MenuItem("Load", "Ctrl+O")) {
+                path modelPath = ResourceManager::loadGeometryFromFile();
+                updateGeometry(modelPath);
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Texture")) {
+            ImGui::MenuItem("Load");
+            ImGui::EndMenu();
+        }
+        ImGui::End();
         ImGui::Begin("Lighting");
+        /* TBD ADD WORLD COLOR EDIT */
         changed = ImGui::ColorEdit3("Color #0", glm::value_ptr(m_lightingUniforms.colors[0]));
         changed = ImGui::DragDirection("Direction #0", m_lightingUniforms.directions[0]) || changed;
         changed = ImGui::ColorEdit3("Color #1", glm::value_ptr(m_lightingUniforms.colors[1]));
@@ -782,7 +805,7 @@ void Application::updateGui(RenderPassEncoder renderPass) {
         changed = ImGui::SliderFloat("Diffuse", &m_lightingUniforms.kd, 0.0f, 1.0f) || changed;
         changed = ImGui::SliderFloat("Specular", &m_lightingUniforms.ks, 0.0f, 1.0f) || changed;
         changed = ImGui::SliderFloat("Normal", &m_lightingUniforms.kn, 0.0f, 1.0f) || changed;
-         
+
         ImGui::End();
         m_lightningUniformsChanged = changed;
     }

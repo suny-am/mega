@@ -1,6 +1,7 @@
 #pragma once
 #include "webgpu/webgpu.hpp"
 #include <glm/glm.hpp>
+#include <filesystem>
 
 using namespace wgpu;
 
@@ -8,6 +9,8 @@ struct GLFWwindow;
 
 class Application {
 public:
+    using path = std::filesystem::path;
+
     bool onInit();
     void onFrame();
     void onResize();
@@ -36,7 +39,8 @@ private:
     bool initTextures();
     void terminateTextures();
 
-    bool initGeometry();
+    bool initGeometry(const path& path);
+    void updateGeometry(const path& path);
     void terminateGeometry();
 
     bool initUniforms();
