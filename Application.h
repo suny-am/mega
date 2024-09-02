@@ -1,5 +1,6 @@
 #pragma once
 #include "webgpu/webgpu.hpp"
+#include "webgpu-raii.hpp"
 #include <glm/glm.hpp>
 #include <filesystem>
 
@@ -48,10 +49,8 @@ private:
     void terminateDepthBuffer();
 
     bool initBindGroupLayout();
-    void terminateBindGroupLayout();
 
     bool initRenderPipeline();
-    void terminateRenderPipeline();
 
     bool initTextures();
     void terminateTextures();
@@ -68,7 +67,6 @@ private:
     void updateLightingUniforms();
 
     bool initBindGroup();
-    void terminateBindGroup();
 
     void updateProjectionMatrix();
     void updateViewMatrix();
@@ -108,39 +106,39 @@ private:
     static_assert(sizeof(LightingUniforms) % 16 == 0);
 
     GLFWwindow* m_window = nullptr;
-    Instance m_instance = nullptr;
-    Surface m_surface = nullptr;
-    Device m_device = nullptr;
-    Queue m_queue = nullptr;
+    raii::Instance m_instance;
+    raii::Surface m_surface;
+    raii::Device m_device;
+    raii::Queue m_queue;
     TextureFormat m_surfaceFormat = TextureFormat::Undefined;
     // Keep the error callback alive
     std::unique_ptr<ErrorCallback> m_errorCallbackHandle;
 
     TextureFormat m_depthTextureFormat = TextureFormat::Depth24Plus;
-    Texture m_depthTexture = nullptr;
-    TextureView m_depthTextureView = nullptr;
+    raii::Texture m_depthTexture;
+    raii::TextureView m_depthTextureView;
 
-    BindGroupLayout m_bindGroupLayout = nullptr;
-    ShaderModule m_shaderModule = nullptr;
-    RenderPipeline m_pipeline = nullptr;
+    raii::BindGroupLayout m_bindGroupLayout;
+    raii::ShaderModule m_shaderModule;
+    raii::RenderPipeline m_pipeline;
 
-    Sampler m_sampler = nullptr;
-    Texture m_baseColorTexture = nullptr;
-    TextureView m_baseColorTextureView = nullptr;
-    Texture m_normalTexture = nullptr;
-    TextureView m_normalTextureView = nullptr;
+    raii::Sampler m_sampler;
+    raii::Texture m_baseColorTexture;
+    raii::TextureView m_baseColorTextureView;
+    raii::Texture m_normalTexture;
+    raii::TextureView m_normalTextureView;
 
-    Buffer m_vertexBuffer = nullptr;
+    raii::Buffer m_vertexBuffer;
     int m_vertexCount = 0;
 
-    Buffer m_uniformBuffer = nullptr;
+    raii::Buffer m_uniformBuffer;
     SharedUniforms m_uniforms;
 
-    Buffer m_lightingUniformBuffer = nullptr;
+    raii::Buffer m_lightingUniformBuffer;
     LightingUniforms m_lightingUniforms;
     bool m_lightningUniformsChanged = false;
 
-    BindGroup m_bindGroup = nullptr;
+    raii::BindGroup m_bindGroup;
 
     CameraState m_cameraState;
     DragState m_drag;
