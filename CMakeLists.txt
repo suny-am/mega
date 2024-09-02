@@ -20,8 +20,16 @@ add_subdirectory(webgpu)
 add_subdirectory(imgui)
 add_subdirectory(nativefiledialog-extended)
 
-add_executable(App Implementations.cpp ResourceManager.h ResourceManager.cpp
-                   Application.h Application.cpp main.cpp)
+add_executable(App  
+  Implementations.cpp
+  main.cpp
+  Application.h 
+  Application.cpp
+  Controls.h
+  Controls.cpp 
+  ResourceManager.h 
+  ResourceManager.cpp
+)
 
 if(DEV_MODE)
   target_compile_definitions(
