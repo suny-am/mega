@@ -10,6 +10,23 @@ struct GLFWwindow;
 class Application {
 public:
     using path = std::filesystem::path;
+    using vec2 = glm::vec2;
+
+    struct CameraState {
+        vec2 angles = { 0.8f, 0.5f };
+        float zoom = -1.2f;
+    };
+
+    struct DragState {
+        bool active = false;
+        vec2 startPos;
+        CameraState startCameraState;
+        float sensitivity = 0.01f;
+        float scrollSensitivity = 0.1f;
+        vec2 velocity = { 0.0, 0.0 };
+        vec2 previousDelta;
+        float inertia = 0.9f;
+    };
 
     bool onInit();
     void onFrame();
@@ -55,7 +72,6 @@ private:
 
     void updateProjectionMatrix();
     void updateViewMatrix();
-    void updateDragInertia();
 
     TextureView getNextSurfaceTextureView();
 
@@ -69,7 +85,6 @@ private:
     using mat4x4 = glm::mat4x4;
     using vec4 = glm::vec4;
     using vec3 = glm::vec3;
-    using vec2 = glm::vec2;
 
     struct SharedUniforms {
         mat4x4 projectionMatrix;
@@ -91,22 +106,6 @@ private:
         float kn = 0.5f;
     };
     static_assert(sizeof(LightingUniforms) % 16 == 0);
-
-    struct CameraState {
-        vec2 angles = { 0.8f, 0.5f };
-        float zoom = -1.2f;
-    };
-
-    struct DragState {
-        bool active = false;
-        vec2 startPos;
-        CameraState startCameraState;
-        float sensitivity = 0.01f;
-        float scrollSensitivity = 0.1f;
-        vec2 velocity = { 0.0, 0.0 };
-        vec2 previousDelta;
-        float inertia = 0.9f;
-    };
 
     GLFWwindow* m_window = nullptr;
     Instance m_instance = nullptr;

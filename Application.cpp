@@ -1,4 +1,5 @@
 #include "Application.h"
+#include "Controls.h"
 #include "ResourceManager.h"
 #include <glfw3webgpu.h>
 #include <GLFW/glfw3.h>
@@ -61,7 +62,9 @@ bool Application::onInit() {
 
 void Application::onFrame() {
     glfwPollEvents();
-    updateDragInertia();
+    if (Controls::updateDragInertia(m_drag, m_cameraState)) {
+        updateViewMatrix();
+    }
     updateLightingUniforms();
 
     m_uniforms.time = static_cast<float>(glfwGetTime());
@@ -703,60 +706,19 @@ void Application::updateViewMatrix() {
 
 void Application::onMouseMove(double xPos, double yPos) {
     if (m_drag.active) {
-        vec2 currentPos = vec2(-(float)xPos, (float)yPos);
-        vec2 delta = (currentPos - m_drag.startPos) * m_drag.sensitivity;
-        m_cameraState.angles = m_drag.startCameraState.angles + delta;
-        // Clamp to avoid going too far when orbiting up/down (y/z plane)
-        m_cameraState.angles.y = glm::clamp(m_cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
+        Controls::updateMouseMove(xPos, yPos, m_drag, m_cameraState);
         updateViewMatrix();
-        m_drag.velocity = delta - m_drag.previousDelta;
-        m_drag.previousDelta = delta;
+        Controls::smoothOut(xPos, yPos, m_drag);
     }
 }
 
-void Application::onMouseButton(int button, int action, int /* mouse event modifiers */) {
-    ImGuiIO& io = ImGui::GetIO();
-    if (io.WantCaptureMouse) {
-        // Do not manipulate camera if interacting with UI components
-        return;
-    }
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        switch (action) {
-        case GLFW_PRESS:
-            m_drag.active = true;
-            double xPos, yPos;
-            glfwGetCursorPos(m_window, &xPos, &yPos);
-            m_drag.startPos = vec2(-(float)xPos, (float)yPos);
-            m_drag.startCameraState = m_cameraState;
-            break;
-        case GLFW_RELEASE:
-            m_drag.active = false;
-            break;
-        }
-    }
+void Application::onMouseButton(int button, int action, int mods) {
+    Controls::updateMouseButton(button, action, mods, m_drag, m_cameraState, m_window);
 }
 
-void Application::onScroll(double /* xOffset */, double yOffset) {
-    m_cameraState.zoom += m_drag.scrollSensitivity * static_cast<float>(yOffset);
-    m_cameraState.zoom = glm::clamp(m_cameraState.zoom, -2.0f, 2.0f);
+void Application::onScroll(double xOffset, double yOffset) {
+    Controls::updateScroll(xOffset, yOffset, m_drag, m_cameraState);
     updateViewMatrix();
-}
-
-void Application::updateDragInertia() {
-    constexpr float eps = 1e-4f;
-
-    // apply inertia only when the mouse button is released
-    if (!m_drag.active) {
-        // skip updating the velocity matrix when the velocity is no longer noticeable
-        if (std::abs(m_drag.velocity.x) < eps && std::abs(m_drag.velocity.y) < eps) {
-            return;
-        }
-        m_cameraState.angles += m_drag.velocity;
-        m_cameraState.angles.y = glm::clamp(m_cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
-        // Dampen the velocity by decreasing it exponentially over subsequent frames
-        m_drag.velocity *= m_drag.inertia;
-        updateViewMatrix();
-    }
 }
 
 bool Application::initGui() {
