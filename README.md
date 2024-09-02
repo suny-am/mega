@@ -147,8 +147,8 @@ Don't forget to give the project a star! Thanks again!
 #### 1. Fork the Project
 
 ```sh
-gh repo fork suny-am/documentation-templates --clone
-cd documentation-templates
+gh repo fork suny-am/mega --clone
+cd mega
 ```
 
 #### 2. Create your Feature Branch
@@ -265,16 +265,16 @@ Here are some resources that were helpful in creating this project:
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/suny-am/documentation-templates.svg?style=for-the-badge
-[contributors-url]: https://github.com/suny-am/documentation-templates/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/suny-am/documentation-templates?style=for-the-badge
-[forks-url]: https://github.com/suny-am/documentation-templates/network/members
-[stars-shield]: https://img.shields.io/github/stars/suny-am/documentation-templates.svg?style=for-the-badge
-[stars-url]: https://github.com/suny-am/documentation-templates/stargazers
-[issues-shield]: https://img.shields.io/github/issues/suny-am/documentation-templates.svg?style=for-the-badge
-[issues-url]: https://github.com/suny-am/documentation-templates/issues
-[license-shield]: https://img.shields.io/github/license/suny-am/documentation-templates.svg?style=for-the-badge
-[license-url]: https://github.com/suny-am/documentation-templates/blob/master/LICENSE.txt
+[contributors-shield]: https://img.shields.io/github/contributors/suny-am/mega.svg?style=for-the-badge
+[contributors-url]: https://github.com/suny-am/mega/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/suny-am/mega?style=for-the-badge
+[forks-url]: https://github.com/suny-am/mega/network/members
+[stars-shield]: https://img.shields.io/github/stars/suny-am/mega.svg?style=for-the-badge
+[stars-url]: https://github.com/suny-am/mega/stargazers
+[issues-shield]: https://img.shields.io/github/issues/suny-am/mega.svg?style=for-the-badge
+[issues-url]: https://github.com/suny-am/mega/issues
+[license-shield]: https://img.shields.io/github/license/suny-am/mega.svg?style=for-the-badge
+[license-url]: https://github.com/suny-am/mega/blob/master/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://linkedin.com/in/carl-sandberg-01070a2b6/
 [CPlusPlus]: https://img.shields.io/badge/c%2B%2B-00599C?style=for-the-badge&logo=cplusplus
