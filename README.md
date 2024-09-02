@@ -11,23 +11,23 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/suny-am/learn-webgpu">
+  <a href="https://github.com/suny-am/mega">
     <img src=".docs/images/logo.png" alt="Logo" width="80" height="80">
   </a>
 
-<h3 align="center">learn-webgpu</h3>
+<h3 align="center">mega</h3>
 
   <p align="center">
-    Learn WebGPU
+    Mega (render engine)
     <br />
-    <a href="https://github.com/suny-am/learn-webgpu"><strong>Explore the docs »</strong></a>
+    <a href="https://github.com/suny-am/mega"><strong>Explore the docs »</strong></a>
     <br />
     <br />
-    <a href="https://github.com/suny-am/learn-webgpu">View Demo</a>
+    <a href="https://github.com/suny-am/mega">View Demo</a>
     ·
-    <a href="https://github.com/suny-am/learn-webgpu/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
+    <a href="https://github.com/suny-am/mega/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
     ·
-    <a href="https://github.com/suny-am/learn-webgpu/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
+    <a href="https://github.com/suny-am/mega/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
   </p>
 </div>
 
@@ -64,7 +64,7 @@
 [![Product Name Screen Shot][product-screenshot]](https://example.com)
 -->
 
-Learning project for WebGPU, going along with the lessons published at [WebGPU c++](https://eliemichel.github.io/LearnWebGPU/index.html)
+Mega is a WebGPU based (targeting DAWN/WGPU and the web via Emscripten) render engine.
 
 <p align="right"><a href="#readme-top">🔝</a></p>
 
@@ -84,9 +84,9 @@ To get a local copy up and running follow these simple example steps.
 ### Prerequisites
 
 This is an example of how to list things you need to use the software and how to install them.
-The foolowing examples pertains to installing the required dependencies on MacOS. For distributions: refer to the [original source material](https://eliemichel.github.io/LearnWebGPU/getting-started/project-setup.html)
+The foolowing examples pertains to installing the required dependencies on MacOS.
 
-##### CMake
+#### CMake
 
   ```sh
   # Make sure to install XCode via the App store first
@@ -99,8 +99,8 @@ The foolowing examples pertains to installing the required dependencies on MacOS
 #### 1. Clone the repo
 
 ```sh
-git clone https://github.com/suny-am/learn-webgpu.git && \
-cd learn-webgpu
+git clone https://github.com/suny-am/mega.git && \
+cd mega
 ```
 
 #### 2. Build the project
@@ -190,48 +190,10 @@ _For more examples, please refer to the [Documentation](https://example.com)_
 <!-- ROADMAP -->
 ## Roadmap
 
-- [ ] Getting Started
-  - [x] Project Setup
-  - [x] Hello WebGPU
-  - [x] Adapter and Device
-  - [x] The Command Queue
-  - [ ] Opening a Window
-  - [ ] First Color
-  - [ ] C++ Wrapper
-- [ ] Basic 3D Rendering
-  - [ ] Hello Triangle
-  - [ ] Inout Geometry
-  - [ ] Shader Uniforms
-  - [ ] 3D Meshes
-  - [ ] Texturing
-  - [ ] Some Interaction
-  - [ ] Lighting and Material
-- [ ] Basic Compute
-  - [ ] Compute Pipeline
-  - [ ] Image Processing
-  - [ ] Procedural Geometry
-  - [ ] Neural Networks (**🛑TODO**)
-- [ ] Advanced Techniques
-  - [ ] Instanced Drawing (**🛑TODO**)
-  - [ ] RAII
-  - [ ] Screen capture (**🚧WIP**)
-  - [ ] Headless context
-  - [ ] High Dynamic Range
-  - [ ] Textures (**🚧WIP**)
-  - [ ] Benchmarking
-  - [ ] Time
-  - [ ] Memory (**🛑TODO**)
-  - [ ] Processing Units (**🛑TODO**)
-  - [ ] Environmental Impact (**🛑TODO**)
-  - [ ] Deferred Shading (**🛑TODO**)
-  - [ ] Render Bundles (**🛑TODO**)
-  - [ ] Multi-Sampling (**🛑TODO**)
-  - [ ] Scene tree (**🛑TODO**)
-  - [ ] Shadow maps (**🛑TODO**)
-  - [ ] Tesselation (**🛑TODO**)
-  - [ ] Raytracing (**🛑TODO**)
+- [ ] TBD
+  -
 
-See the [open issues](https://github.com/suny-am/learn-webgpu/issues) for a full list of proposed features (and known issues).
+See the [open issues](https://github.com/suny-am/mega/issues) for a full list of proposed features (and known issues).
 
 <p align="right"><a href="#readme-top">🔝</a></p>
 
@@ -264,7 +226,7 @@ Distributed under the MIT License. See [LICENCE.txt](LICENCE.txt) for more infor
 
 Your Name - [@sunyam.bsky.social](https://bsky.app/profile/sunyam.bsky.social) - [visualarea.1@gmail.com](mailto:visualarea.1@gmail.com)
 
-Project Link: [https://github.com/suny-am/learn-webgpu](https://github.com/suny-am/learn-webgpu)
+Project Link: [https://github.com/suny-am/mega](https://github.com/suny-am/mega)
 
 <p align="right"><a href="#readme-top">🔝</a></p>
 
