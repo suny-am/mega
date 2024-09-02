@@ -80,14 +80,12 @@ bool ResourceManager::loadGeometryFromObj(const path& path, std::vector<VertexAt
             const tinyobj::index_t& idx = shape.mesh.indices[i];
 
             vertexData[offset + i].position = {
-                // switch indices around to reorient up-axis around Z
                 attrib.vertices[3 * idx.vertex_index + 0],
                 -attrib.vertices[3 * idx.vertex_index + 2],
                 attrib.vertices[3 * idx.vertex_index + 1],
             };
 
             vertexData[offset + i].normal = {
-                // switch indices around to reorient up-axis around Z
                 attrib.normals[3 * idx.normal_index + 0],
                 -attrib.normals[3 * idx.normal_index + 2],
                 attrib.normals[3 * idx.normal_index + 1],
@@ -118,7 +116,7 @@ Texture ResourceManager::loadTexture(const path& path, Device device, TextureVie
     TextureDescriptor textureDesc;
     textureDesc.dimension = TextureDimension::_2D;
     textureDesc.size = { (unsigned int)width, (unsigned int)height, 1 };
-    textureDesc.format = TextureFormat::RGBA8Unorm; // RGBA channels; 8 bits per channel; unsigned real number values in normalized space 0-1
+    textureDesc.format = TextureFormat::RGBA8Unorm;
     textureDesc.mipLevelCount = bit_width(std::max(textureDesc.size.width, textureDesc.size.height));
     textureDesc.sampleCount = 1;
     textureDesc.usage = TextureUsage::TextureBinding | TextureUsage::CopyDst;

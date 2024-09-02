@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0...3.25)
 project(
-  LearnWebGPU
+  Mega
   VERSION 0.1.0
   LANGUAGES CXX C)
 
