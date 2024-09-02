@@ -93,7 +93,7 @@ bool ResourceManager::loadGeometryFromObj(const path& path, std::vector<VertexAt
                 attrib.normals[3 * idx.normal_index + 1],
             };
 
-            vertexData[offset + i].color = {
+            vertexData[offset + i].objectColor = {
                 attrib.colors[3 * idx.vertex_index + 0],
                 attrib.colors[3 * idx.vertex_index + 1],
                 attrib.colors[3 * idx.vertex_index + 2]

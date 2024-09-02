@@ -75,7 +75,8 @@ private:
         mat4x4 projectionMatrix;
         mat4x4 viewMatrix;
         mat4x4 modelMatrix;
-        vec4 color;
+        vec4 worldColor;
+        vec4 objectColor;
         vec3 cameraWorldPosition;
         float time;
     };
