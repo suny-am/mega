@@ -1,10 +1,6 @@
 [submodule "nativefiledialog-extended"]
 	path = nativefiledialog-extended
 	url = https://github.com/btzy/nativefiledialog-extended
-[submodule "imgui"]
-	path = imgui
-	url = https://github.com/ocornut/imgui
-	ignore = untracked
 [submodule "glfw"]
 	path = glfw
 	url = https://github.com/glfw/glfw
@@ -14,3 +10,6 @@
 [submodule "glfw3webgpu"]
 	path = glfw3webgpu
 	url = https://github.com/eliemichel/glfw3webgpu
+[submodule "imgui"]
+	path = imgui
+	url = https://github.com/ocornut/imgui
