@@ -1,4 +1,4 @@
-#include "Controls.h"
+#include "controls.h"
 #include <glm/glm.hpp>
 #include "glm/ext.hpp"
 #include "imgui.h"

@@ -1,6 +1,6 @@
-#include "Application.h"
-#include "Controls.h"
-#include "ResourceManager.h"
+#include "application.h"
+#include "controls.h"
+#include "resource-manager.h"
 #include "webgpu-raii.hpp"
 #include <glfw3webgpu.h>
 #include <GLFW/glfw3.h>

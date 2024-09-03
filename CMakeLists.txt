@@ -39,14 +39,14 @@ add_subdirectory(imgui)
 add_subdirectory(nativefiledialog-extended)
 
 add_executable(App  
-  Implementations.cpp
+  implementations.cpp
   main.cpp
-  Application.h 
-  Application.cpp
-  Controls.h
-  Controls.cpp 
-  ResourceManager.h 
-  ResourceManager.cpp
+  application.h 
+  application.cpp
+  controls.h
+  controls.cpp 
+  resource-manager.h 
+  resource-manager.cpp
 )
 
 if(DEV_MODE)
