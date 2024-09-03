@@ -22,8 +22,20 @@ if(GIT_FIND AND EXISTS "$PROJECT_SOURCE_DIR/.git")
     endif()
 endif()
 
-if(NOT EXISTS "${PROJECT_SOURCE_DIR}/imgui/CMakeLists.txt")
-  message(FATAL_ERROR "imgui submodule was not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again")
+if(NOT EXISTS "${PROJECT_SOURCE_DIR}/glfw/CMakeLists.txt")
+  message(FATAL_ERROR "glfw submodule was not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again")
+endif()
+
+if(NOT EXISTS "${PROJECT_SOURCE_DIR}/glm/CMakeLists.txt")
+  message(FATAL_ERROR "glm submodule was not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again")
+endif()
+
+if(NOT EXISTS "${PROJECT_SOURCE_DIR}/glfw3webgpu/CMakeLists.txt")
+  message(FATAL_ERROR "glfw3webgpu submodule was not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again")
+endif()
+
+if(NOT EXISTS "${PROJECT_SOURCE_DIR}/nativefiledialog-extended/CMakeLists.txt")
+  message(FATAL_ERROR "nativefiledialog-extended submodule was not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again")
 endif()
 
 if(NOT EMSCRIPTEN)
@@ -35,8 +47,14 @@ endif()
 
 add_subdirectory(glfw3webgpu)
 add_subdirectory(webgpu)
-add_subdirectory(imgui)
 add_subdirectory(nativefiledialog-extended)
+
+if(NOT EXISTS imgui/CMakeLists.txt)
+  file(READ CMakeLists_imgui.txt CMAKE_IMGUI)
+  file(WRITE imgui/CMakeLists.txt ${CMAKE_IMGUI})
+endif()
+
+add_subdirectory(imgui)
 
 add_executable(App  
   implementations.cpp
