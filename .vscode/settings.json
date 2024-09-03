@@ -18,6 +18,7 @@
         "shared_mutex": "cpp",
         "thread": "cpp",
         "unordered_map": "cpp",
-        "*.ipp": "cpp"
+        "*.ipp": "cpp",
+        "filesystem": "cpp"
     }
 }

@@ -1,7 +1,7 @@
 #pragma once
 #include <webgpu/webgpu.hpp>
-#include <glm/glm.hpp>
-#include <glm/ext.hpp>
+#include <glm/glm/glm.hpp>
+#include <glm/glm/ext.hpp>
 #include <filesystem>
 
 using namespace wgpu;

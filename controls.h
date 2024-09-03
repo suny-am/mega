@@ -1,5 +1,5 @@
 #include "application.h"
-#include <glm/glm.hpp>
+#include <glm/glm/glm.hpp>
 
 class Controls {
 public:

@@ -1,7 +1,7 @@
 #pragma once
 #include "webgpu/webgpu.hpp"
-#include "webgpu-raii.hpp"
-#include <glm/glm.hpp>
+#include "webgpu/webgpu-raii.hpp"
+#include <glm/glm/glm.hpp>
 #include <filesystem>
 
 using namespace wgpu;

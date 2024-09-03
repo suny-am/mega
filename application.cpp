@@ -1,11 +1,11 @@
 #include "application.h"
 #include "controls.h"
 #include "resource-manager.h"
-#include "webgpu-raii.hpp"
+#include "webgpu/webgpu-raii.hpp"
 #include <glfw3webgpu.h>
 #include <GLFW/glfw3.h>
-#include "glm/glm.hpp"
-#include <glm/ext.hpp>
+#include <glm/glm/glm.hpp>
+#include <glm/glm/ext.hpp>
 #include <imgui.h>
 #include <iostream>
 #include <cassert>
@@ -18,7 +18,8 @@
 #include <cstddef>
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_wgpu.h"
-#include <glm/gtx/polar_coordinates.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm/gtx/polar_coordinates.hpp>
 
 using std::cout;
 using std::cerr;
@@ -696,7 +697,14 @@ bool Application::initGui() {
     ImGui::GetIO();
 
     ImGui_ImplGlfw_InitForOther(m_window, true);
-    ImGui_ImplWGPU_Init(*m_device, 3, m_surfaceFormat, m_depthTextureFormat);
+    ImGui_ImplWGPU_InitInfo initInfo;
+
+    initInfo.Device = *m_device;
+    initInfo.NumFramesInFlight = 3;
+    initInfo.RenderTargetFormat = m_surfaceFormat;
+    initInfo.DepthStencilFormat = m_depthTextureFormat;
+
+    ImGui_ImplWGPU_Init(&initInfo);
     return true;
 }
 
