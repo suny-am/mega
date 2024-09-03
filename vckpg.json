@@ -1,0 +1,15 @@
+{
+    "name": "mega",
+    "version": "0.1.0",
+    "dependencies": [
+        {
+            "name": "imgui"
+        },
+        {
+            "name": "imguizmo"
+        },
+        {
+            "name": "stb"
+        }
+    ]
+}
