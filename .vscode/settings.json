@@ -1,0 +1,26 @@
+{
+    "files.associations": {
+        "ostream": "cpp",
+        "string": "cpp",
+        "array": "cpp",
+        "__config": "cpp",
+        "__hash_table": "cpp",
+        "__mutex_base": "cpp",
+        "__tree": "cpp",
+        "atomic": "cpp",
+        "deque": "cpp",
+        "fstream": "cpp",
+        "list": "cpp",
+        "locale": "cpp",
+        "map": "cpp",
+        "memory": "cpp",
+        "mutex": "cpp",
+        "shared_mutex": "cpp",
+        "thread": "cpp",
+        "unordered_map": "cpp",
+        "*.ipp": "cpp"
+    },
+    "cmake.configureArgs": [
+        "-DCMAKE_TOOLCHAIN_FILE={$env:VCPKPG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    ]
+}
