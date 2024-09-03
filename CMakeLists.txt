@@ -8,6 +8,36 @@ include(utils.cmake)
 
 option(DEV_MODE "Set up development helper settings" ON)
 
+find_package(Git QUIET)
+if(GIT_FIND AND EXISTS "$PROJECT_SOURCE_DIR/.git")
+  option(GIT_SUBMODULE "Check submodules during build" ON)
+    if(GIT_SUBMODULE)
+      message(STATUS "Submodule update")
+      execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+                      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                      RESULT_VARIABLE GIT_SUBMOD_RESULT)
+      if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+        message(FATAL_ERROR "git submodule update --init --recursive failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
+      endif()
+    endif()
+endif()
+
+if(NOT EXISTS "${PROJECT_SOURCE_DIR}/glfw/CMakeLists.txt")
+  message(FATAL_ERROR "glfw submodule was not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again")
+endif()
+
+if(NOT EXISTS "${PROJECT_SOURCE_DIR}/glm/CMakeLists.txt")
+  message(FATAL_ERROR "glm submodule was not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again")
+endif()
+
+if(NOT EXISTS "${PROJECT_SOURCE_DIR}/glfw3webgpu/CMakeLists.txt")
+  message(FATAL_ERROR "glfw3webgpu submodule was not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again")
+endif()
+
+if(NOT EXISTS "${PROJECT_SOURCE_DIR}/nativefiledialog-extended/CMakeLists.txt")
+  message(FATAL_ERROR "nativefiledialog-extended submodule was not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again")
+endif()
+
 if(NOT EMSCRIPTEN)
   add_subdirectory(glfw)
 else()
@@ -17,18 +47,24 @@ endif()
 
 add_subdirectory(glfw3webgpu)
 add_subdirectory(webgpu)
-add_subdirectory(imgui)
 add_subdirectory(nativefiledialog-extended)
 
+if(NOT EXISTS imgui/CMakeLists.txt)
+  file(READ CMakeLists_imgui.txt CMAKE_IMGUI)
+  file(WRITE imgui/CMakeLists.txt ${CMAKE_IMGUI})
+endif()
+
+add_subdirectory(imgui)
+
 add_executable(App  
-  Implementations.cpp
+  implementations.cpp
   main.cpp
-  Application.h 
-  Application.cpp
-  Controls.h
-  Controls.cpp 
-  ResourceManager.h 
-  ResourceManager.cpp
+  application.h 
+  application.cpp
+  controls.h
+  controls.cpp 
+  resource-manager.h 
+  resource-manager.cpp
 )
 
 if(DEV_MODE)

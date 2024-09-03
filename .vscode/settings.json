@@ -19,8 +19,5 @@
         "thread": "cpp",
         "unordered_map": "cpp",
         "*.ipp": "cpp"
-    },
-    "cmake.configureArgs": [
-        "-DCMAKE_TOOLCHAIN_FILE={$env:VCPKPG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-    ]
+    }
 }
