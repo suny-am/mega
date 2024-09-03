@@ -41,6 +41,8 @@
 *.out
 *.app
 
+# Dear ImGui CMake
+imgui/CMakeLists.txt
 
 # Misc
 .DS_Store
