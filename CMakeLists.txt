@@ -80,8 +80,10 @@ else()
   target_compile_definitions(App PRIVATE RESOURCE_DIR="./resources")
 endif()
 
-target_compile_definitions(App PRIVATE GLM_FORCE_DEPTH_ZERO_TONE=1
-                                       GLM_FORCE_LEFT_HANDED=1)
+target_compile_definitions(App PRIVATE                                   
+  GLM_FORCE_DEPTH_ZERO_TONE=1
+  GLM_FORCE_LEFT_HANDED=1
+)
 
 target_include_directories(App PRIVATE .)
 
