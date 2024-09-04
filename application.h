@@ -64,14 +64,30 @@ private:
 	void updateProjectionMatrix();
 	void updateViewMatrix();
 
-	bool initGui();
-	void terminateGui();
-	void updateGui(wgpu::RenderPassEncoder renderPass);
-
 	wgpu::TextureView getNextSurfaceTextureView();
 
 public:
+	using mat4x4 = glm::mat4x4;
+	using vec4 = glm::vec4;
+	using vec3 = glm::vec3;
 	using vec2 = glm::vec2;
+
+	struct GlobalUniforms {
+		mat4x4 projectionMatrix;
+		mat4x4 viewMatrix;
+		vec4 worldColor;
+		vec3 cameraWorldPosition;
+		float time;
+		float gamma;
+		float _pad1[3];
+	};
+	static_assert(sizeof(GlobalUniforms) % 16 == 0);
+
+	struct LightingUniforms {
+		std::array<vec4, 2> directions;
+		std::array<vec4, 2> colors;
+	};
+	static_assert(sizeof(LightingUniforms) % 16 == 0);
 
 	struct CameraState {
 		// angles.x is the rotation of the camera around the global vertical axis, affected by mouse.x
@@ -98,31 +114,14 @@ public:
 		vec2 previousDelta;
 		float inertia = 0.9f;
 	};
+
+	GlobalUniforms m_uniforms;
+	LightingUniforms m_lightingUniforms;
+
 	CameraState m_cameraState;
 	DragState m_drag;
 
 private:
-	using mat4x4 = glm::mat4x4;
-	using vec4 = glm::vec4;
-	using vec3 = glm::vec3;
-
-	struct GlobalUniforms {
-		mat4x4 projectionMatrix;
-		mat4x4 viewMatrix;
-		vec3 cameraWorldPosition;
-		float time;
-		float gamma;
-		float _pad1[3];
-	};
-	static_assert(sizeof(GlobalUniforms) % 16 == 0);
-
-	struct LightingUniforms {
-		std::array<vec4, 2> directions;
-		std::array<vec4, 2> colors;
-	};
-	static_assert(sizeof(LightingUniforms) % 16 == 0);
-
-
 	// Window and Device
 	GLFWwindow* m_window = nullptr;
 	wgpu::Instance m_instance = nullptr;
@@ -153,9 +152,7 @@ private:
 
 	// Uniforms
 	wgpu::Buffer m_uniformBuffer = nullptr;
-	GlobalUniforms m_uniforms;
 	wgpu::Buffer m_lightingUniformBuffer = nullptr;
-	LightingUniforms m_lightingUniforms;
 	bool m_lightingUniformsChanged = true;
 
 	// Bind Group Layout
@@ -165,5 +162,4 @@ private:
 
 	// Bind Group
 	wgpu::BindGroup m_bindGroup = nullptr;
-
 };

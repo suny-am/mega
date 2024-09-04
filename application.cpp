@@ -1,7 +1,9 @@
 
 #include "application.h"
 #include "controls.h"
+#include "ui-manager.h"
 #include "resource-manager.h"
+
 #include "webgpu-std-utils.hpp"
 
 #include <glfw3webgpu.h>
@@ -9,8 +11,6 @@
 
 #include <glm/glm/glm.hpp>
 #include <glm/glm/ext.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm/gtx/polar_coordinates.hpp>
 
 #include <imgui/imgui.h>
 #include <backends/imgui_impl_wgpu.h>
@@ -32,16 +32,6 @@ using std::cerr;
 
 constexpr float PI = 3.14159265358979323846f;
 
-// Custom ImGui widgets
-namespace ImGui {
-	bool DragDirection(const char* label, glm::vec4& direction) {
-		glm::vec2 angles = glm::degrees(glm::polar(glm::vec3(direction)));
-		bool changed = ImGui::DragFloat2(label, glm::value_ptr(angles));
-		direction = glm::vec4(glm::euclidean(glm::radians(angles)), direction.w);
-		return changed;
-	}
-} // namespace ImGui
-
 ///////////////////////////////////////////////////////////////////////////////
 // Public methods
 
@@ -55,12 +45,12 @@ bool Application::onInit() {
 	if (!initUniforms()) return false;
 	if (!initLightingUniforms()) return false;
 	if (!initBindGroup()) return false;
-	if (!initGui()) return false;
+	if (!UiManager::init(m_window, m_device, m_surfaceFormat, m_depthTextureFormat)) return false;
 	return true;
 }
 
 void Application::onFinish() {
-	terminateGui();
+	UiManager::shutdown();
 	terminateBindGroup();
 	terminateLightingUniforms();
 	terminateUniforms();
@@ -97,8 +87,7 @@ void Application::onFrame() {
 	renderPassColorAttachment.resolveTarget = nullptr;
 	renderPassColorAttachment.loadOp = LoadOp::Clear;
 	renderPassColorAttachment.storeOp = StoreOp::Store;
-	float grey = std::pow(0.25, textureFormatGamma(m_surfaceFormat));
-	renderPassColorAttachment.clearValue = Color{ grey, grey, grey, 1.0 };
+	renderPassColorAttachment.clearValue = Color{ m_uniforms.worldColor.r,m_uniforms.worldColor.g, m_uniforms.worldColor.b,m_uniforms.worldColor.w };
 	renderPassDesc.colorAttachmentCount = 1;
 	renderPassDesc.colorAttachments = &renderPassColorAttachment;
 
@@ -131,7 +120,7 @@ void Application::onFrame() {
 	}
 
 	// We add the GUI drawing commands to the render pass
-	updateGui(renderPass);
+	UiManager::update(renderPass, m_uniforms, m_lightingUniforms, m_lightingUniformsChanged);
 
 	renderPass.end();
 	renderPass.release();
@@ -335,7 +324,6 @@ bool Application::initDepthBuffer() {
 	depthTextureDesc.viewFormatCount = 1;
 	depthTextureDesc.viewFormats = (WGPUTextureFormat*)&m_depthTextureFormat;
 	m_depthTexture = m_device.createTexture(depthTextureDesc);
-	cout << "Depth texture: " << m_depthTexture << endl;
 
 	// Create the view of the depth texture manipulated by the rasterizer
 	TextureViewDescriptor depthTextureViewDesc;
@@ -347,7 +335,6 @@ bool Application::initDepthBuffer() {
 	depthTextureViewDesc.dimension = TextureViewDimension::_2D;
 	depthTextureViewDesc.format = m_depthTextureFormat;
 	m_depthTextureView = m_depthTexture.createView(depthTextureViewDesc);
-	cout << "Depth texture view: " << m_depthTextureView << endl;
 
 	return m_depthTextureView != nullptr;
 }
@@ -357,7 +344,6 @@ void Application::terminateDepthBuffer() {
 	m_depthTexture.destroy();
 	m_depthTexture.release();
 }
-
 
 bool Application::initRenderPipelines() {
 	cout << "Creating shader module..." << endl;
@@ -452,7 +438,6 @@ void Application::terminateRenderPipelines() {
 	m_shaderModule.release();
 }
 
-
 bool Application::initGeometry() {
 	// Load mesh data from OBJ file
 	// bool success = ResourceManager::loadGeometryFromGltf(RESOURCE_DIR "/scenes/BusterDrone.glb", m_cpuScene);
@@ -472,7 +457,6 @@ void Application::terminateGeometry() {
 	m_cpuScene = {};
 }
 
-
 bool Application::initUniforms() {
 	// Create uniform buffer
 	BufferDescriptor bufferDesc;
@@ -486,6 +470,8 @@ bool Application::initUniforms() {
 	m_uniforms.projectionMatrix = glm::perspective(45 * PI / 180, 640.0f / 480.0f, 0.01f, 100.0f);
 	m_uniforms.time = 1.0f;
 	m_uniforms.gamma = textureFormatGamma(m_surfaceFormat);
+	float grey = std::pow(0.25, textureFormatGamma(m_surfaceFormat));
+	m_uniforms.worldColor = { grey, grey,grey, 1.0 };
 	m_queue.writeBuffer(m_uniformBuffer, 0, &m_uniforms, sizeof(GlobalUniforms));
 
 	updateProjectionMatrix();
@@ -498,7 +484,6 @@ void Application::terminateUniforms() {
 	m_uniformBuffer.destroy();
 	m_uniformBuffer.release();
 }
-
 
 bool Application::initLightingUniforms() {
 	// Create uniform buffer
@@ -697,56 +682,6 @@ void Application::updateViewMatrix() {
 		&m_uniforms.cameraWorldPosition,
 		sizeof(GlobalUniforms::cameraWorldPosition)
 	);
-}
-
-bool Application::initGui() {
-	// Setup Dear ImGui context
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGui::GetIO();
-
-	// Setup Platform/Renderer backends
-	ImGui_ImplGlfw_InitForOther(m_window, true);
-	ImGui_ImplWGPU_InitInfo initInfo;
-
-	initInfo.Device = m_device;
-	initInfo.NumFramesInFlight = 3;
-	initInfo.RenderTargetFormat = m_surfaceFormat;
-	initInfo.DepthStencilFormat = m_depthTextureFormat;
-
-	ImGui_ImplWGPU_Init(&initInfo);
-	return true;
-}
-
-void Application::terminateGui() {
-	ImGui_ImplGlfw_Shutdown();
-	ImGui_ImplWGPU_Shutdown();
-}
-
-void Application::updateGui(RenderPassEncoder renderPass) {
-	// Start the Dear ImGui frame
-	ImGui_ImplWGPU_NewFrame();
-	ImGui_ImplGlfw_NewFrame();
-	ImGui::NewFrame();
-
-	// Build our UI
-	{
-		bool changed = false;
-		ImGui::Begin("Lighting");
-		changed = ImGui::ColorEdit3("Color #0", glm::value_ptr(m_lightingUniforms.colors[0])) || changed;
-		changed = ImGui::DragDirection("Direction #0", m_lightingUniforms.directions[0]) || changed;
-		changed = ImGui::ColorEdit3("Color #1", glm::value_ptr(m_lightingUniforms.colors[1])) || changed;
-		changed = ImGui::DragDirection("Direction #1", m_lightingUniforms.directions[1]) || changed;
-		ImGui::End();
-		m_lightingUniformsChanged = changed;
-	}
-
-	// Draw the UI
-	ImGui::EndFrame();
-	// Convert the UI defined above into low-level drawing commands
-	ImGui::Render();
-	// Execute the low-level drawing commands on the WebGPU backend
-	ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
 }
 
 wgpu::TextureView Application::getNextSurfaceTextureView()
