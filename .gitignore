@@ -14,8 +14,14 @@
 *.obj
 *.mtl
 
+# Compiled Scene files
+*.glb
+*.gltf
+
 # Texture Files
 *.jpg
+*.png
+*.exr
 
 # Precompiled Headers
 *.gch
