@@ -146,6 +146,7 @@ struct GlobalUniforms {
 	projectionMatrix: mat4x4f,
 	viewMatrix: mat4x4f,
 	cameraWorldPosition: vec3f,
+	worldColor: vec3f,
 	time: f32,
 	gamma: f32,
 };
