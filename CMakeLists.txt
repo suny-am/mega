@@ -47,15 +47,14 @@ else()
   target_link_options(glfw INTERFACE -sUSE_GLFW=3)
 endif()
 
-add_subdirectory(glfw3webgpu)
-add_subdirectory(webgpu)
-add_subdirectory(nativefiledialog-extended)
-
 if(NOT EXISTS imgui/CMakeLists.txt)
   file(READ CMakeLists_imgui.txt CMAKE_IMGUI)
   file(WRITE imgui/CMakeLists.txt ${CMAKE_IMGUI})
 endif()
 
+add_subdirectory(glfw3webgpu)
+add_subdirectory(webgpu)
+add_subdirectory(nativefiledialog-extended)
 add_subdirectory(imgui)
 
 add_executable(App  
