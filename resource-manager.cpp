@@ -4,6 +4,7 @@
 #include <glm/glm/glm.hpp>
 #include <glm/glm/ext.hpp>
 #include "resource-loaders/tiny_obj_loader.h"
+#include "resource-loaders/tiny_gltf.h"
 #include "resource-loaders/stb_image.h"
 #include <filesystem>
 #include <fstream>
@@ -141,6 +142,32 @@ Texture ResourceManager::loadTexture(const path& path, Device device, TextureVie
     }
 
     return texture;
+}
+
+bool ResourceManager::loadGeometryFromGltf(const path& path, tinygltf::Model& model) {
+	using namespace tinygltf;
+
+	TinyGLTF loader;
+	std::string err;
+	std::string warn;
+
+	bool success = false;
+	if (path.extension() == ".glb") {
+		success = loader.LoadBinaryFromFile(&model, &err, &warn, path.string());
+	}
+	else {
+		success = loader.LoadASCIIFromFile(&model, &err, &warn, path.string());
+	}
+
+	if (!warn.empty()) {
+		std::cout << "Warning: " << warn << std::endl;
+	}
+
+	if (!err.empty()) {
+		std::cerr << "Error: " << err << std::endl;
+	}
+
+	return success;
 }
 
 ResourceManager::path ResourceManager::loadGeometryFromFile() {

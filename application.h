@@ -1,145 +1,167 @@
 #pragma once
-#include "webgpu/webgpu.hpp"
-#include "webgpu/webgpu-raii.hpp"
+
+#include "gpu-scene.h"
+#include "resource-loaders/tiny_gltf.h"
+
+#include <webgpu/webgpu.hpp>
 #include <glm/glm/glm.hpp>
-#include <filesystem>
 
-using namespace wgpu;
+#include <array>
 
+// Forward declare
 struct GLFWwindow;
 
 class Application {
 public:
-    using path = std::filesystem::path;
-    using vec2 = glm::vec2;
+	// A function called only once at the beginning. Returns false if init failed.
+	bool onInit();
 
-    struct CameraState {
-        vec2 angles = { 0.8f, 0.5f };
-        float zoom = -1.2f;
-    };
+	// A function called at each frame, guaranteed never to be called before `onInit`.
+	void onFrame();
 
-    struct DragState {
-        bool active = false;
-        vec2 startPos;
-        CameraState startCameraState;
-        float sensitivity = 0.01f;
-        float scrollSensitivity = 0.1f;
-        vec2 velocity = { 0.0, 0.0 };
-        vec2 previousDelta;
-        float inertia = 0.9f;
-    };
+	// A function called only once at the very end.
+	void onFinish();
 
-    bool onInit();
-    void onFrame();
-    void onResize();
-    void onFinish();
-    bool isRunning();
+	// A function that tells if the application is still running.
+	bool isRunning();
 
-    void onMouseMove(double xPos, double yPos);
-    void onMouseButton(int button, int action, int mods);
-    void onScroll(double xOffset, double yOffset);
+	// A function called when the window is resized.
+	void onResize();
+
+	// Mouse events
+	void onMouseMove(double xpos, double ypos);
+	void onMouseButton(int button, int action, int mods);
+	void onScroll(double xoffset, double yoffset);
 
 private:
-    bool initWindowAndDevice();
-    void terminateWindowAndDevice();
+	bool initWindowAndDevice();
+	void terminateWindowAndDevice();
 
-    bool initSurfaceConfiguration();
+	bool initSurfaceConfiguration();
 
-    bool initDepthBuffer();
-    void terminateDepthBuffer();
+	bool initDepthBuffer();
+	void terminateDepthBuffer();
 
-    bool initBindGroupLayout();
+	bool initRenderPipelines();
+	void terminateRenderPipelines();
 
-    bool initRenderPipeline();
+	bool initGeometry();
+	void terminateGeometry();
 
-    bool initTextures();
-    void terminateTextures();
+	bool initUniforms();
+	void terminateUniforms();
 
-    bool initGeometry(const path& path);
-    void updateGeometry(const path& path);
-    void terminateGeometry();
+	bool initLightingUniforms();
+	void terminateLightingUniforms();
+	void updateLightingUniforms();
 
-    bool initUniforms();
-    void terminateUniforms();
+	bool initBindGroupLayouts();
+	void terminateBindGroupLayouts();
 
-    bool initLightingUniforms();
-    void terminateLightingUniforms();
-    void updateLightingUniforms();
+	bool initBindGroup();
+	void terminateBindGroup();
 
-    bool initBindGroup();
+	void updateProjectionMatrix();
+	void updateViewMatrix();
+	void updateDragInertia();
 
-    void updateProjectionMatrix();
-    void updateViewMatrix();
+	bool initGui();
+	void terminateGui();
+	void updateGui(wgpu::RenderPassEncoder renderPass);
 
-    TextureView getNextSurfaceTextureView();
-
-    bool initGui();
-    void terminateGui();
-    void updateGui(RenderPassEncoder renderPass);
-
-    bool createWindow();
+	TextureView getNextSurfaceTextureView();
 
 private:
-    using mat4x4 = glm::mat4x4;
-    using vec4 = glm::vec4;
-    using vec3 = glm::vec3;
+	using mat4x4 = glm::mat4x4;
+	using vec4 = glm::vec4;
+	using vec3 = glm::vec3;
+	using vec2 = glm::vec2;
 
-    struct SharedUniforms {
-        mat4x4 projectionMatrix;
-        mat4x4 viewMatrix;
-        mat4x4 modelMatrix;
-        vec4 worldColor;
-        vec4 objectColor;
-        vec3 cameraWorldPosition;
-        float time;
-    };
-    static_assert(sizeof(SharedUniforms) % 16 == 0);
+	struct GlobalUniforms {
+		mat4x4 projectionMatrix;
+		mat4x4 viewMatrix;
+		vec3 cameraWorldPosition;
+		float time;
+		float gamma;
+		float _pad1[3];
+	};
+	static_assert(sizeof(GlobalUniforms) % 16 == 0);
 
-    struct LightingUniforms {
-        std::array<vec4, 2> directions;
-        std::array<vec4, 2> colors;
-        float hardness = 32.0f;
-        float kd = 1.0f;
-        float ks = 0.5f;
-        float kn = 0.5f;
-    };
-    static_assert(sizeof(LightingUniforms) % 16 == 0);
+	struct LightingUniforms {
+		std::array<vec4, 2> directions;
+		std::array<vec4, 2> colors;
+	};
+	static_assert(sizeof(LightingUniforms) % 16 == 0);
 
-    GLFWwindow* m_window = nullptr;
-    raii::Instance m_instance;
-    raii::Surface m_surface;
-    raii::Device m_device;
-    raii::Queue m_queue;
-    TextureFormat m_surfaceFormat = TextureFormat::Undefined;
-    // Keep the error callback alive
-    std::unique_ptr<ErrorCallback> m_errorCallbackHandle;
+	struct CameraState {
+		// angles.x is the rotation of the camera around the global vertical axis, affected by mouse.x
+		// angles.y is the rotation of the camera around its local horizontal axis, affected by mouse.y
+		vec2 angles = { 0.8f, 0.5f };
+		// zoom is the position of the camera along its local forward axis, affected by the scroll wheel
+		float zoom = -1.2f;
+	};
 
-    TextureFormat m_depthTextureFormat = TextureFormat::Depth24Plus;
-    raii::Texture m_depthTexture;
-    raii::TextureView m_depthTextureView;
+	struct DragState {
+		// Whether a drag action is ongoing (i.e., we are between mouse press and mouse release)
+		bool active = false;
+		// The position of the mouse at the beginning of the drag action
+		vec2 startMouse;
+		// The camera state at the beginning of the drag action
+		CameraState startCameraState;
 
-    raii::BindGroupLayout m_bindGroupLayout;
-    raii::ShaderModule m_shaderModule;
-    raii::RenderPipeline m_pipeline;
+		// Constant settings
+		float sensitivity = 0.01f;
+		float scrollSensitivity = 0.1f;
 
-    raii::Sampler m_sampler;
-    raii::Texture m_baseColorTexture;
-    raii::TextureView m_baseColorTextureView;
-    raii::Texture m_normalTexture;
-    raii::TextureView m_normalTextureView;
+		// Inertia
+		vec2 velocity = { 0.0, 0.0 };
+		vec2 previousDelta;
+		float intertia = 0.9f;
+	};
 
-    raii::Buffer m_vertexBuffer;
-    int m_vertexCount = 0;
+	// Window and Device
+	GLFWwindow* m_window = nullptr;
+	wgpu::Instance m_instance = nullptr;
+	wgpu::Surface m_surface = nullptr;
+	wgpu::Device m_device = nullptr;
+	wgpu::Queue m_queue = nullptr;
+	wgpu::TextureFormat m_surfaceFormat = wgpu::TextureFormat::Undefined;
+	// Keep the error callback alive
+	std::unique_ptr<wgpu::ErrorCallback> m_errorCallbackHandle;
 
-    raii::Buffer m_uniformBuffer;
-    SharedUniforms m_uniforms;
+	// Depth Buffer
+	wgpu::TextureFormat m_depthTextureFormat = wgpu::TextureFormat::Depth24Plus;
+	wgpu::Texture m_depthTexture = nullptr;
+	wgpu::TextureView m_depthTextureView = nullptr;
 
-    raii::Buffer m_lightingUniformBuffer;
-    LightingUniforms m_lightingUniforms;
-    bool m_lightningUniformsChanged = false;
+	// Render Pipeline
+	wgpu::ShaderModule m_shaderModule = nullptr;
+	std::vector<wgpu::RenderPipeline> m_pipelines;
 
-    raii::BindGroup m_bindGroup;
+	// Texture
+	wgpu::Sampler m_sampler = nullptr;
+	wgpu::Texture m_texture = nullptr;
+	wgpu::TextureView m_textureView = nullptr;
+	
+	// Geometry
+	tinygltf::Model m_cpuScene;
+	GpuScene m_gpuScene;
 
-    CameraState m_cameraState;
-    DragState m_drag;
+	// Uniforms
+	wgpu::Buffer m_uniformBuffer = nullptr;
+	GlobalUniforms m_uniforms;
+	wgpu::Buffer m_lightingUniformBuffer = nullptr;
+	LightingUniforms m_lightingUniforms;
+	bool m_lightingUniformsChanged = true;
+
+	// Bind Group Layout
+	wgpu::BindGroupLayout m_bindGroupLayout = nullptr;
+	wgpu::BindGroupLayout m_materialBindGroupLayout = nullptr;
+	wgpu::BindGroupLayout m_nodeBindGroupLayout = nullptr;
+
+	// Bind Group
+	wgpu::BindGroup m_bindGroup = nullptr;
+
+	CameraState m_cameraState;
+	DragState m_drag;
 };

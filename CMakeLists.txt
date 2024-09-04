@@ -59,14 +59,19 @@ endif()
 add_subdirectory(imgui)
 
 add_executable(App  
-  implementations.cpp
   main.cpp
-  application.h 
+  application.h
   application.cpp
-  controls.h
-  controls.cpp 
-  resource-manager.h 
+  gltf-debug-renderer.h
+  gltf-debug-renderer.cpp
+  gpu-scene.h
+  gpu-scene.cpp
+  resource-manager.h
   resource-manager.cpp
+  implementations.cpp
+  webgpu-std-utils.hpp
+  webgpu-gltf-utils.h
+  webgpu-gltf-utils.cpp
 )
 
 if(DEV_MODE)
