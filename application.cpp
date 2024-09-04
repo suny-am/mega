@@ -1,3 +1,4 @@
+
 #include "application.h"
 #include "resource-manager.h"
 #include "webgpu-std-utils.hpp"
@@ -5,10 +6,9 @@
 #include <glfw3webgpu.h>
 #include <GLFW/glfw3.h>
 
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_FORCE_LEFT_HANDED
 #include <glm/glm/glm.hpp>
 #include <glm/glm/ext.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm/gtx/polar_coordinates.hpp>
 
 #include <imgui/imgui.h>
@@ -787,7 +787,7 @@ void Application::updateGui(RenderPassEncoder renderPass) {
 	ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
 }
 
-TextureView Application::getNextSurfaceTextureView()
+wgpu::TextureView Application::getNextSurfaceTextureView()
 {
 	SurfaceTexture surfaceTexture;
 	m_surface.getCurrentTexture(&surfaceTexture);

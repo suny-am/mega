@@ -69,7 +69,7 @@ private:
 	void terminateGui();
 	void updateGui(wgpu::RenderPassEncoder renderPass);
 
-	TextureView getNextSurfaceTextureView();
+	wgpu::TextureView getNextSurfaceTextureView();
 
 private:
 	using mat4x4 = glm::mat4x4;
