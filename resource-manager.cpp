@@ -1,11 +1,17 @@
 #include "application.h"
 #include "resource-manager.h"
+
 #include <webgpu/webgpu.hpp>
+
 #include <glm/glm/glm.hpp>
 #include <glm/glm/ext.hpp>
+
 #include "resource-loaders/tiny_obj_loader.h"
 #include "resource-loaders/tiny_gltf.h"
 #include "resource-loaders/stb_image.h"
+
+#include "webgpu-std-utils.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <nfd.h>
@@ -25,8 +31,6 @@ static void writeMipMaps(
     [[maybe_unused]] uint32_t mipLevelcount,
     const unsigned char* pixelData
 );
-
-uint32_t bit_width(uint32_t m);
 
 ShaderModule ResourceManager::loadShaderModule(const path& path, Device device) {
     std::ifstream file(path);
@@ -234,11 +238,6 @@ glm::mat3x3 ResourceManager::computeTBN(const VertexAttributes corners[3], const
     B = cross(N, T);
 
     return mat3x3(T, B, N);
-}
-
-uint32_t bit_width(uint32_t m) {
-    if (m == 0) return 0;
-    else { uint32_t w = 0; while (m >>= 1) ++w; return w; }
 }
 
 static void writeMipMaps(
