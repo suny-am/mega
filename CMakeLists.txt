@@ -61,6 +61,8 @@ add_executable(App
   main.cpp
   application.h
   application.cpp
+  controls.h
+  controls.cpp
   gltf-debug-renderer.h
   gltf-debug-renderer.cpp
   gpu-scene.h

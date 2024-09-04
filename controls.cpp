@@ -7,22 +7,17 @@
 constexpr float PI = 3.14159265358979323846f;
 
 void Controls::updateMouseMove(double xPos, double yPos, DragState& drag, CameraState& cameraState) {
-    if (drag.active) {
-        vec2 currentPos = vec2(-(float)xPos, (float)yPos);
-        vec2 delta = (currentPos - drag.startPos) * drag.sensitivity;
-        cameraState.angles = drag.startCameraState.angles + delta;
-        cameraState.angles.y = glm::clamp(cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
-
-    }
+    vec2 currentPos = vec2(-(float)xPos, (float)yPos);
+    vec2 delta = (currentPos - drag.startPos) * drag.sensitivity;
+    cameraState.angles = drag.startCameraState.angles + delta;
+    cameraState.angles.y = glm::clamp(cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
 }
 
 void Controls::smoothOut(double xPos, double yPos, DragState& drag) {
-    if (drag.active) {
-        vec2 currentPos = vec2(-(float)xPos, (float)yPos);
-        vec2 delta = (currentPos - drag.startPos) * drag.sensitivity;
-        drag.velocity = delta - drag.previousDelta;
-        drag.previousDelta = delta;
-    }
+    vec2 currentPos = vec2(-(float)xPos, (float)yPos);
+    vec2 delta = (currentPos - drag.startPos) * drag.sensitivity;
+    drag.velocity = delta - drag.previousDelta;
+    drag.previousDelta = delta;
 }
 
 void Controls::updateMouseButton(int button, int action, int /* modifiers */, DragState& drag, CameraState& cameraState, GLFWwindow*& window) {

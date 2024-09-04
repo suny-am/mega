@@ -1,5 +1,6 @@
 
 #include "application.h"
+#include "controls.h"
 #include "resource-manager.h"
 #include "webgpu-std-utils.hpp"
 
@@ -24,6 +25,10 @@
 
 using namespace wgpu;
 using VertexAttributes = ResourceManager::VertexAttributes;
+
+using std::cout;
+using std::endl;
+using std::cerr;
 
 constexpr float PI = 3.14159265358979323846f;
 
@@ -68,7 +73,7 @@ void Application::onFinish() {
 
 void Application::onFrame() {
 	glfwPollEvents();
-	updateDragInertia();
+	Controls::updateDragInertia(*&m_drag, *&m_cameraState);
 	updateLightingUniforms();
 
 	// Update uniform buffer
@@ -77,7 +82,7 @@ void Application::onFrame() {
 
 	TextureView nextTexture = getNextSurfaceTextureView();
 	if (!nextTexture) {
-		std::cerr << "Could not acquire next texture from surface configuration" << std::endl;
+		cerr << "Could not acquire next texture from surface configuration" << endl;
 		return;
 	}
 
@@ -164,48 +169,20 @@ void Application::onResize() {
 	updateProjectionMatrix();
 }
 
-void Application::onMouseMove(double xpos, double ypos) {
+void Application::onMouseMove(double xPos, double yPos) {
 	if (m_drag.active) {
-		vec2 currentMouse = vec2(-(float)xpos, (float)ypos);
-		vec2 delta = (currentMouse - m_drag.startMouse) * m_drag.sensitivity;
-		m_cameraState.angles = m_drag.startCameraState.angles + delta;
-		// Clamp to avoid going too far when orbitting up/down
-		m_cameraState.angles.y = glm::clamp(m_cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
+		Controls::updateMouseMove(xPos, yPos, *&m_drag, *&m_cameraState);
 		updateViewMatrix();
-
-		// Inertia
-		m_drag.velocity = delta - m_drag.previousDelta;
-		m_drag.previousDelta = delta;
+		Controls::smoothOut(xPos, yPos, *&m_drag);
 	}
 }
 
-void Application::onMouseButton(int button, int action, int /* modifiers */) {
-	ImGuiIO& io = ImGui::GetIO();
-	if (io.WantCaptureMouse) {
-		// Don't rotate the camera if the mouse is already captured by an ImGui
-		// interaction at this frame.
-		return;
-	}
-
-	if (button == GLFW_MOUSE_BUTTON_LEFT) {
-		switch (action) {
-		case GLFW_PRESS:
-			m_drag.active = true;
-			double xpos, ypos;
-			glfwGetCursorPos(m_window, &xpos, &ypos);
-			m_drag.startMouse = vec2(-(float)xpos, (float)ypos);
-			m_drag.startCameraState = m_cameraState;
-			break;
-		case GLFW_RELEASE:
-			m_drag.active = false;
-			break;
-		}
-	}
+void Application::onMouseButton(int button, int action, int mods) {
+	Controls::updateMouseButton(button, action, mods, *&m_drag, *&m_cameraState, m_window);
 }
 
-void Application::onScroll(double /* xoffset */, double yoffset) {
-	m_cameraState.zoom += m_drag.scrollSensitivity * static_cast<float>(yoffset);
-	m_cameraState.zoom = glm::clamp(m_cameraState.zoom, -2.0f, 2.0f);
+void Application::onScroll(double xOffset, double yOffset) {
+	Controls::updateScroll(xOffset, yOffset, *&m_drag, *&m_cameraState);
 	updateViewMatrix();
 }
 
@@ -215,12 +192,12 @@ void Application::onScroll(double /* xoffset */, double yoffset) {
 bool Application::initWindowAndDevice() {
 	m_instance = createInstance(InstanceDescriptor{});
 	if (!m_instance) {
-		std::cerr << "Could not initialize WebGPU!" << std::endl;
+		cerr << "Could not initialize WebGPU!" << endl;
 		return false;
 	}
 
 	if (!glfwInit()) {
-		std::cerr << "Could not initialize GLFW!" << std::endl;
+		cerr << "Could not initialize GLFW!" << endl;
 		return false;
 	}
 
@@ -228,21 +205,21 @@ bool Application::initWindowAndDevice() {
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 	m_window = glfwCreateWindow(640, 480, "Learn WebGPU", NULL, NULL);
 	if (!m_window) {
-		std::cerr << "Could not open window!" << std::endl;
+		cerr << "Could not open window!" << endl;
 		return false;
 	}
 
-	std::cout << "Requesting adapter..." << std::endl;
+	cout << "Requesting adapter..." << endl;
 	m_surface = glfwGetWGPUSurface(m_instance, m_window);
 	RequestAdapterOptions adapterOpts{};
 	adapterOpts.compatibleSurface = m_surface;
 	Adapter adapter = m_instance.requestAdapter(adapterOpts);
-	std::cout << "Got adapter: " << adapter << std::endl;
+	cout << "Got adapter: " << adapter << endl;
 
 	SupportedLimits supportedLimits;
 	adapter.getLimits(&supportedLimits);
 
-	std::cout << "Requesting device..." << std::endl;
+	cout << "Requesting device..." << endl;
 	RequiredLimits requiredLimits = Default;
 	requiredLimits.limits.maxVertexAttributes = 4;
 	requiredLimits.limits.maxVertexBuffers = 4;
@@ -267,13 +244,13 @@ bool Application::initWindowAndDevice() {
 	deviceDesc.requiredLimits = &requiredLimits;
 	deviceDesc.defaultQueue.label = "Default Device";
 	m_device = adapter.requestDevice(deviceDesc);
-	std::cout << "Got device: " << m_device << std::endl;
+	cout << "Got device: " << m_device << endl;
 
 	// Add an error callback for more debug info
 	m_errorCallbackHandle = m_device.setUncapturedErrorCallback([](ErrorType type, char const* message) {
-		std::cout << "Device error: type " << type;
-		if (message) std::cout << " (message: " << message << ")";
-		std::cout << std::endl;
+		cout << "Device error: type " << type;
+		if (message) cout << " (message: " << message << ")";
+		cout << endl;
 																});
 
 	m_queue = m_device.getQueue();
@@ -291,9 +268,9 @@ bool Application::initWindowAndDevice() {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
 		if (that != nullptr) that->onResize();
 								   });
-	glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xpos, double ypos) {
+	glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xPos, double yPos) {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
-		if (that != nullptr) that->onMouseMove(xpos, ypos);
+		if (that != nullptr) that->onMouseMove(xPos, yPos);
 							 });
 	glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int button, int action, int mods) {
 		auto that = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
@@ -358,7 +335,7 @@ bool Application::initDepthBuffer() {
 	depthTextureDesc.viewFormatCount = 1;
 	depthTextureDesc.viewFormats = (WGPUTextureFormat*)&m_depthTextureFormat;
 	m_depthTexture = m_device.createTexture(depthTextureDesc);
-	std::cout << "Depth texture: " << m_depthTexture << std::endl;
+	cout << "Depth texture: " << m_depthTexture << endl;
 
 	// Create the view of the depth texture manipulated by the rasterizer
 	TextureViewDescriptor depthTextureViewDesc;
@@ -370,7 +347,7 @@ bool Application::initDepthBuffer() {
 	depthTextureViewDesc.dimension = TextureViewDimension::_2D;
 	depthTextureViewDesc.format = m_depthTextureFormat;
 	m_depthTextureView = m_depthTexture.createView(depthTextureViewDesc);
-	std::cout << "Depth texture view: " << m_depthTextureView << std::endl;
+	cout << "Depth texture view: " << m_depthTextureView << endl;
 
 	return m_depthTextureView != nullptr;
 }
@@ -383,11 +360,14 @@ void Application::terminateDepthBuffer() {
 
 
 bool Application::initRenderPipelines() {
-	std::cout << "Creating shader module..." << std::endl;
-	m_shaderModule = ResourceManager::loadShaderModule(RESOURCE_DIR "/shader.wgsl", m_device);
-	std::cout << "Shader module: " << m_shaderModule << std::endl;
+	cout << "Creating shader module..." << endl;
+	m_shaderModule = ResourceManager::loadShaderModule(RESOURCE_DIR "/shaders/shader.wgsl", m_device);
+	if (!m_shaderModule) {
+		cerr << "Could not load shader from path!" << endl;
+	}
+	cout << "Shader module: " << m_shaderModule << endl;
 
-	std::cout << "Creating render pipeline..." << std::endl;
+	cout << "Creating render pipeline..." << endl;
 	RenderPipelineDescriptor pipelineDesc;
 
 	pipelineDesc.vertex.module = m_shaderModule;
@@ -456,7 +436,7 @@ bool Application::initRenderPipelines() {
 		pipelineDesc.primitive.topology = m_gpuScene.primitiveTopology(pipelineIdx);
 
 		RenderPipeline pipeline = m_device.createRenderPipeline(pipelineDesc);
-		std::cout << "Render pipeline: " << pipeline << std::endl;
+		cout << "Render pipeline: " << pipeline << endl;
 		if (pipeline == nullptr) return false;
 		m_pipelines.push_back(pipeline);
 	}
@@ -479,7 +459,7 @@ bool Application::initGeometry() {
 	bool success = ResourceManager::loadGeometryFromGltf(RESOURCE_DIR "/scenes/DamagedHelmet.glb", m_cpuScene);
 	//bool success = ResourceManager::loadGeometryFromGltf(RESOURCE_DIR "/scenes/triangle.gltf", m_cpuScene);
 	if (!success) {
-		std::cerr << "Could not load geometry!" << std::endl;
+		cerr << "Could not load geometry!" << endl;
 		return false;
 	}
 	m_gpuScene.createFromModel(m_device, m_cpuScene, m_materialBindGroupLayout, m_nodeBindGroupLayout);
@@ -719,23 +699,6 @@ void Application::updateViewMatrix() {
 	);
 }
 
-void Application::updateDragInertia() {
-	constexpr float eps = 1e-4f;
-	// Apply inertia only when the user released the click.
-	if (!m_drag.active) {
-		// Avoid updating the matrix when the velocity is no longer noticeable
-		if (std::abs(m_drag.velocity.x) < eps && std::abs(m_drag.velocity.y) < eps) {
-			return;
-		}
-		m_cameraState.angles += m_drag.velocity;
-		m_cameraState.angles.y = glm::clamp(m_cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
-		// Dampen the velocity so that it decreases exponentially and stops
-		// after a few frames.
-		m_drag.velocity *= m_drag.intertia;
-		updateViewMatrix();
-	}
-}
-
 bool Application::initGui() {
 	// Setup Dear ImGui context
 	IMGUI_CHECKVERSION();
@@ -743,7 +706,6 @@ bool Application::initGui() {
 	ImGui::GetIO();
 
 	// Setup Platform/Renderer backends
-	ImGui_ImplGlfw_InitForOther(m_window, true);
 	ImGui_ImplGlfw_InitForOther(m_window, true);
 	ImGui_ImplWGPU_InitInfo initInfo;
 
