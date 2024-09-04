@@ -1,10 +1,17 @@
 #include "application.h"
 #include "resource-manager.h"
+
 #include <webgpu/webgpu.hpp>
+
 #include <glm/glm/glm.hpp>
 #include <glm/glm/ext.hpp>
+
 #include "resource-loaders/tiny_obj_loader.h"
+#include "resource-loaders/tiny_gltf.h"
 #include "resource-loaders/stb_image.h"
+
+#include "webgpu-std-utils.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <nfd.h>
@@ -24,8 +31,6 @@ static void writeMipMaps(
     [[maybe_unused]] uint32_t mipLevelcount,
     const unsigned char* pixelData
 );
-
-uint32_t bit_width(uint32_t m);
 
 ShaderModule ResourceManager::loadShaderModule(const path& path, Device device) {
     std::ifstream file(path);
@@ -143,6 +148,32 @@ Texture ResourceManager::loadTexture(const path& path, Device device, TextureVie
     return texture;
 }
 
+bool ResourceManager::loadGeometryFromGltf(const path& path, tinygltf::Model& model) {
+	using namespace tinygltf;
+
+	TinyGLTF loader;
+	std::string err;
+	std::string warn;
+
+	bool success = false;
+	if (path.extension() == ".glb") {
+		success = loader.LoadBinaryFromFile(&model, &err, &warn, path.string());
+	}
+	else {
+		success = loader.LoadASCIIFromFile(&model, &err, &warn, path.string());
+	}
+
+	if (!warn.empty()) {
+		std::cout << "Warning: " << warn << std::endl;
+	}
+
+	if (!err.empty()) {
+		std::cerr << "Error: " << err << std::endl;
+	}
+
+	return success;
+}
+
 ResourceManager::path ResourceManager::loadGeometryFromFile() {
     NFD_Init();
 
@@ -207,11 +238,6 @@ glm::mat3x3 ResourceManager::computeTBN(const VertexAttributes corners[3], const
     B = cross(N, T);
 
     return mat3x3(T, B, N);
-}
-
-uint32_t bit_width(uint32_t m) {
-    if (m == 0) return 0;
-    else { uint32_t w = 0; while (m >>= 1) ++w; return w; }
 }
 
 static void writeMipMaps(

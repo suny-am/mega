@@ -47,26 +47,32 @@ else()
   target_link_options(glfw INTERFACE -sUSE_GLFW=3)
 endif()
 
-add_subdirectory(glfw3webgpu)
-add_subdirectory(webgpu)
-add_subdirectory(nativefiledialog-extended)
-
 if(NOT EXISTS imgui/CMakeLists.txt)
   file(READ CMakeLists_imgui.txt CMAKE_IMGUI)
   file(WRITE imgui/CMakeLists.txt ${CMAKE_IMGUI})
 endif()
 
+add_subdirectory(glfw3webgpu)
+add_subdirectory(webgpu)
+add_subdirectory(nativefiledialog-extended)
 add_subdirectory(imgui)
 
 add_executable(App  
-  implementations.cpp
   main.cpp
-  application.h 
+  application.h
   application.cpp
   controls.h
-  controls.cpp 
-  resource-manager.h 
+  controls.cpp
+  gltf-debug-renderer.h
+  gltf-debug-renderer.cpp
+  gpu-scene.h
+  gpu-scene.cpp
+  resource-manager.h
   resource-manager.cpp
+  implementations.cpp
+  webgpu-std-utils.hpp
+  webgpu-gltf-utils.h
+  webgpu-gltf-utils.cpp
 )
 
 if(DEV_MODE)
@@ -76,8 +82,10 @@ else()
   target_compile_definitions(App PRIVATE RESOURCE_DIR="./resources")
 endif()
 
-target_compile_definitions(App PRIVATE GLM_FORCE_DEPTH_ZERO_TONE=1
-                                       GLM_FORCE_LEFT_HANDED=1)
+target_compile_definitions(App PRIVATE                                   
+  GLM_FORCE_DEPTH_ZERO_TONE=1
+  GLM_FORCE_LEFT_HANDED=1
+)
 
 target_include_directories(App PRIVATE .)
 

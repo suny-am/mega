@@ -27,6 +27,8 @@ public:
 
     static bool loadGeometryFromObj(const path& path, std::vector<VertexAttributes>& vertexData);
 
+    static bool loadGeometryFromGltf(const path& path, tinygltf::Model& model);
+
     static Texture loadTexture(const path& path, Device device, TextureView* pTextureView = nullptr);
 
     static path loadGeometryFromFile();
