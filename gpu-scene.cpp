@@ -2,7 +2,7 @@
 #include "webgpu-std-utils.hpp"
 #include "webgpu-gltf-utils.h"
 
-#include "tiny_gltf.h"
+#include "resource-loaders/tiny_gltf.h"
 
 #include <glm/glm/gtc/type_ptr.hpp>
 

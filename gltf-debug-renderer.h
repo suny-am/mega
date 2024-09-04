@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tiny_gltf.h"
+#include "resource-loaders/tiny_gltf.h"
 
 #include <webgpu/webgpu.hpp>
 
