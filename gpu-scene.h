@@ -99,7 +99,7 @@ private:
 
 	// Materials
 	struct Material {
-		wgpu::BindGroup bindGroup = nullptr;
+		wgpu::raii::BindGroup bindGroup;
 		wgpu::Buffer uniformBuffer = nullptr;
 		MaterialUniforms uniforms;
 	};
@@ -140,7 +140,7 @@ private:
 
 	// Nodes
 	struct Node {
-		wgpu::BindGroup bindGroup = nullptr;
+		wgpu::raii::BindGroup bindGroup;
 		wgpu::Buffer uniformBuffer = nullptr;
 		NodeUniforms uniforms;
 		uint32_t meshIndex;

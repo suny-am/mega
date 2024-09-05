@@ -37,7 +37,7 @@ void GpuScene::createFromModel(
 void GpuScene::draw(wgpu::RenderPassEncoder renderPass, uint32_t renderPipelineIndex) {
 	for (const Node& node : m_nodes) {
 		const Mesh& mesh = m_meshes[node.meshIndex];
-		renderPass.setBindGroup(2, node.bindGroup, 0, nullptr);
+		renderPass.setBindGroup(2, *node.bindGroup, 0, nullptr);
 		for (const MeshPrimitive& prim : mesh.primitives) {
 			if (prim.renderPipelineIndex != renderPipelineIndex) continue;
 			for (size_t layoutIdx = 0; layoutIdx < prim.attributeBufferViews.size(); ++layoutIdx) {
@@ -50,7 +50,7 @@ void GpuScene::draw(wgpu::RenderPassEncoder renderPass, uint32_t renderPipelineI
 					renderPass.setVertexBuffer(slot, *m_nullBuffer, 0, 4 * sizeof(float));
 				}
 			}
-			renderPass.setBindGroup(1, m_materials[prim.materialIndex].bindGroup, 0, nullptr);
+			renderPass.setBindGroup(1, *m_materials[prim.materialIndex].bindGroup, 0, nullptr);
 			assert(prim.indexBufferView.byteStride == 0 || prim.indexBufferView.byteStride == indexFormatByteSize(prim.indexFormat));
 			renderPass.setIndexBuffer(
 				*m_buffers[prim.indexBufferView.bufferIndex],
@@ -393,7 +393,6 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 
 void GpuScene::terminateMaterials() {
 	for (Material& mat : m_materials) {
-		mat.bindGroup.release();
 		mat.uniformBuffer.destroy();
 		mat.uniformBuffer.release();
 	}
@@ -459,7 +458,6 @@ void GpuScene::initNodes(const tinygltf::Model& model, BindGroupLayout bindGroup
 
 void GpuScene::terminateNodes() {
 	for (Node& node : m_nodes) {
-		node.bindGroup.release();
 		node.uniformBuffer.destroy();
 		node.uniformBuffer.release();
 	}
