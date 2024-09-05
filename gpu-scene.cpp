@@ -47,7 +47,7 @@ void GpuScene::draw(wgpu::RenderPassEncoder renderPass, uint32_t renderPipelineI
 					renderPass.setVertexBuffer(slot, m_buffers[view.bufferIndex], view.byteOffset, view.byteLength);
 				}
 				else {
-					renderPass.setVertexBuffer(slot, m_nullBuffer, 0, 4 * sizeof(float));
+					renderPass.setVertexBuffer(slot, *m_nullBuffer, 0, 4 * sizeof(float));
 				}
 			}
 			renderPass.setBindGroup(1, m_materials[prim.materialIndex].bindGroup, 0, nullptr);
@@ -109,10 +109,8 @@ void GpuScene::terminateBuffers() {
 	m_buffers.clear();
 
 	if (m_nullBuffer) {
-		m_nullBuffer.destroy();
-		m_nullBuffer.release();
+		m_nullBuffer->destroy();
 	}
-	m_nullBuffer = nullptr;
 }
 
 void GpuScene::initTextures(const tinygltf::Model& model) {

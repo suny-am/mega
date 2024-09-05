@@ -80,7 +80,7 @@ private:
 
 	// Buffers
 	std::vector<wgpu::Buffer> m_buffers;
-	wgpu::Buffer m_nullBuffer = nullptr; // for attributes that are not provided
+	wgpu::raii::Buffer m_nullBuffer; // for attributes that are not provided
 
 	// Texture
 	std::vector<wgpu::Texture> m_textures;
