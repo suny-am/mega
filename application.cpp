@@ -41,18 +41,16 @@ bool Application::onInit() {
 	if (!initUniforms()) return false;
 	if (!initLightingUniforms()) return false;
 	if (!initBindGroup()) return false;
-	if (!UiManager::init(m_window, m_device, m_surfaceFormat, m_depthTextureFormat)) return false;
+	if (!UiManager::init(m_window, *m_device, m_surfaceFormat, m_depthTextureFormat)) return false;
 	return true;
 }
 
 void Application::onFinish() {
 	UiManager::shutdown();
-	terminateBindGroup();
 	terminateLightingUniforms();
 	terminateUniforms();
 	terminateRenderPipelines();
 	terminateGeometry();
-	terminateBindGroupLayouts();
 	terminateDepthBuffer();
 	terminateWindowAndDevice();
 }
@@ -64,7 +62,7 @@ void Application::onFrame() {
 
 	// Update uniform buffer
 	m_uniforms.time = static_cast<float>(glfwGetTime());
-	m_queue.writeBuffer(m_uniformBuffer, offsetof(GlobalUniforms, time), &m_uniforms.time, sizeof(GlobalUniforms::time));
+	m_queue->writeBuffer(*m_uniformBuffer, offsetof(GlobalUniforms, time), &m_uniforms.time, sizeof(GlobalUniforms::time));
 
 	TextureView nextTexture = getNextSurfaceTextureView();
 	if (!nextTexture) {
@@ -74,7 +72,7 @@ void Application::onFrame() {
 
 	CommandEncoderDescriptor commandEncoderDesc;
 	commandEncoderDesc.label = "Command Encoder";
-	CommandEncoder encoder = m_device.createCommandEncoder(commandEncoderDesc);
+	CommandEncoder encoder = m_device->createCommandEncoder(commandEncoderDesc);
 
 	RenderPassDescriptor renderPassDesc{};
 
@@ -88,7 +86,7 @@ void Application::onFrame() {
 	renderPassDesc.colorAttachments = &renderPassColorAttachment;
 
 	RenderPassDepthStencilAttachment depthStencilAttachment;
-	depthStencilAttachment.view = m_depthTextureView;
+	depthStencilAttachment.view = *m_depthTextureView;
 	depthStencilAttachment.depthClearValue = 1.0f;
 	depthStencilAttachment.depthLoadOp = LoadOp::Clear;
 	depthStencilAttachment.depthStoreOp = StoreOp::Store;
@@ -110,7 +108,7 @@ void Application::onFrame() {
 
 	for (uint32_t pipelineIdx = 0; pipelineIdx < m_pipelines.size(); ++pipelineIdx) {
 		renderPass.setPipeline(m_pipelines[pipelineIdx]);
-		renderPass.setBindGroup(0, m_bindGroup, 0, nullptr);
+		renderPass.setBindGroup(0, *m_bindGroup, 0, nullptr);
 
 		m_gpuScene.draw(renderPass, pipelineIdx);
 	}
@@ -128,14 +126,14 @@ void Application::onFrame() {
 	CommandBuffer command = encoder.finish(cmdBufferDescriptor);
 	encoder.release();
 
-	m_queue.submit(command);
+	m_queue->submit(command);
 	command.release();
 
-	m_surface.present();
+	m_surface->present();
 
 #ifdef WEBGPU_BACKEND_DAWN
 	// Check for pending error callbacks
-	m_device.tick();
+	m_device->tick();
 #endif
 }
 
@@ -195,10 +193,10 @@ bool Application::initWindowAndDevice() {
 	}
 
 	std::cout << "Requesting adapter..." << std::endl;
-	m_surface = glfwGetWGPUSurface(m_instance, m_window);
+	*m_surface = glfwGetWGPUSurface(*m_instance, m_window);
 	RequestAdapterOptions adapterOpts{};
-	adapterOpts.compatibleSurface = m_surface;
-	Adapter adapter = m_instance.requestAdapter(adapterOpts);
+	adapterOpts.compatibleSurface = *m_surface;
+	Adapter adapter = m_instance->requestAdapter(adapterOpts);
 	std::cout << "Got adapter: " << adapter << std::endl;
 
 	SupportedLimits supportedLimits;
@@ -232,16 +230,16 @@ bool Application::initWindowAndDevice() {
 	std::cout << "Got device: " << m_device << std::endl;
 
 	// Add an error callback for more debug info
-	m_errorCallbackHandle = m_device.setUncapturedErrorCallback([](ErrorType type, char const* message) {
+	m_errorCallbackHandle = m_device->setUncapturedErrorCallback([](ErrorType type, char const* message) {
 		std::cout << "Device error: type " << type;
 		if (message)  std::cout << " (message: " << message << ")";
 		std::cout << std::endl;
-																});
+																 });
 
-	m_queue = m_device.getQueue();
+	m_queue = m_device->getQueue();
 
 #ifdef WEBGPU_BACKEND_WGPU
-	m_surfaceFormat = m_surface.getPreferredFormat(adapter);
+	m_surfaceFormat = m_surface->getPreferredFormat(adapter);
 #else
 	m_surfaceFormat = TextureFormat::BGRA8Unorm;
 #endif
@@ -267,15 +265,10 @@ bool Application::initWindowAndDevice() {
 						  });
 
 	adapter.release();
-	return m_device != nullptr;
+	return m_device;
 }
 
 void Application::terminateWindowAndDevice() {
-	m_queue.release();
-	m_device.release();
-	m_surface.release();
-	m_instance.release();
-
 	glfwDestroyWindow(m_window);
 	glfwTerminate();
 }
@@ -295,13 +288,13 @@ bool Application::initSurfaceConfiguration()
 	surfaceConfig.format = m_surfaceFormat;
 	surfaceConfig.viewFormatCount = 0;
 	surfaceConfig.viewFormats = nullptr;
-	surfaceConfig.device = m_device;
+	surfaceConfig.device = *m_device;
 	surfaceConfig.presentMode = PresentMode::Fifo;
 	surfaceConfig.alphaMode = CompositeAlphaMode::Auto;
 
-	m_surface.configure(surfaceConfig);
+	m_surface->configure(surfaceConfig);
 
-	return m_surface != nullptr;
+	return m_surface;
 }
 
 bool Application::initDepthBuffer() {
@@ -319,7 +312,7 @@ bool Application::initDepthBuffer() {
 	depthTextureDesc.usage = TextureUsage::RenderAttachment;
 	depthTextureDesc.viewFormatCount = 1;
 	depthTextureDesc.viewFormats = (WGPUTextureFormat*)&m_depthTextureFormat;
-	m_depthTexture = m_device.createTexture(depthTextureDesc);
+	m_depthTexture = m_device->createTexture(depthTextureDesc);
 
 	// Create the view of the depth texture manipulated by the rasterizer
 	TextureViewDescriptor depthTextureViewDesc;
@@ -330,20 +323,18 @@ bool Application::initDepthBuffer() {
 	depthTextureViewDesc.mipLevelCount = 1;
 	depthTextureViewDesc.dimension = TextureViewDimension::_2D;
 	depthTextureViewDesc.format = m_depthTextureFormat;
-	m_depthTextureView = m_depthTexture.createView(depthTextureViewDesc);
+	m_depthTextureView = m_depthTexture->createView(depthTextureViewDesc);
 
-	return m_depthTextureView != nullptr;
+	return m_depthTextureView;
 }
 
 void Application::terminateDepthBuffer() {
-	m_depthTextureView.release();
-	m_depthTexture.destroy();
-	m_depthTexture.release();
+	m_depthTexture->destroy();
 }
 
 bool Application::initRenderPipelines() {
 	std::cout << "Creating shader module..." << std::endl;
-	m_shaderModule = ResourceManager::loadShaderModule(RESOURCE_DIR "/shaders/shader.wgsl", m_device);
+	m_shaderModule = ResourceManager::loadShaderModule(RESOURCE_DIR "/shaders/shader.wgsl", *m_device);
 	if (!m_shaderModule) {
 		std::cerr << "Could not load shader from path!" << std::endl;
 	}
@@ -352,7 +343,7 @@ bool Application::initRenderPipelines() {
 	std::cout << "Creating render pipeline..." << std::endl;
 	RenderPipelineDescriptor pipelineDesc;
 
-	pipelineDesc.vertex.module = m_shaderModule;
+	pipelineDesc.vertex.module = *m_shaderModule;
 	pipelineDesc.vertex.entryPoint = "vs_main";
 	pipelineDesc.vertex.constantCount = 0;
 	pipelineDesc.vertex.constants = nullptr;
@@ -363,7 +354,7 @@ bool Application::initRenderPipelines() {
 
 	FragmentState fragmentState;
 	pipelineDesc.fragment = &fragmentState;
-	fragmentState.module = m_shaderModule;
+	fragmentState.module = *m_shaderModule;
 	fragmentState.entryPoint = "fs_main";
 	fragmentState.constantCount = 0;
 	fragmentState.constants = nullptr;
@@ -398,16 +389,16 @@ bool Application::initRenderPipelines() {
 	pipelineDesc.multisample.alphaToCoverageEnabled = false;
 
 	std::vector<BindGroupLayout> bindGroupLayouts = {
-		m_bindGroupLayout,
-		m_materialBindGroupLayout,
-		m_nodeBindGroupLayout
+		*m_bindGroupLayout,
+		*m_materialBindGroupLayout,
+		*m_nodeBindGroupLayout
 	};
 
 	// Create the pipeline layout
 	PipelineLayoutDescriptor layoutDesc{};
 	layoutDesc.bindGroupLayoutCount = static_cast<uint32_t>(bindGroupLayouts.size());
 	layoutDesc.bindGroupLayouts = (WGPUBindGroupLayout*)bindGroupLayouts.data();
-	PipelineLayout layout = m_device.createPipelineLayout(layoutDesc);
+	PipelineLayout layout = m_device->createPipelineLayout(layoutDesc);
 	pipelineDesc.layout = layout;
 
 	for (uint32_t pipelineIdx = 0; pipelineIdx < m_gpuScene.renderPipelineCount(); ++pipelineIdx) {
@@ -417,7 +408,7 @@ bool Application::initRenderPipelines() {
 		pipelineDesc.vertex.buffers = vertexBufferLayouts.data();
 		pipelineDesc.primitive.topology = m_gpuScene.primitiveTopology(pipelineIdx);
 
-		RenderPipeline pipeline = m_device.createRenderPipeline(pipelineDesc);
+		RenderPipeline pipeline = m_device->createRenderPipeline(pipelineDesc);
 		std::cout << "Render pipeline: " << pipeline << std::endl;
 		if (pipeline == nullptr) return false;
 		m_pipelines.push_back(pipeline);
@@ -427,11 +418,7 @@ bool Application::initRenderPipelines() {
 }
 
 void Application::terminateRenderPipelines() {
-	for (RenderPipeline pipeline : m_pipelines) {
-		pipeline.release();
-	}
 	m_pipelines.clear();
-	m_shaderModule.release();
 }
 
 bool Application::initGeometry() {
@@ -443,7 +430,7 @@ bool Application::initGeometry() {
 		std::cerr << "Could not load geometry!" << std::endl;
 		return false;
 	}
-	m_gpuScene.createFromModel(m_device, m_cpuScene, m_materialBindGroupLayout, m_nodeBindGroupLayout);
+	m_gpuScene.createFromModel(*m_device, m_cpuScene, *m_materialBindGroupLayout, *m_nodeBindGroupLayout);
 
 	return true;
 }
@@ -459,7 +446,7 @@ bool Application::initUniforms() {
 	bufferDesc.size = sizeof(GlobalUniforms);
 	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
 	bufferDesc.mappedAtCreation = false;
-	m_uniformBuffer = m_device.createBuffer(bufferDesc);
+	m_uniformBuffer = m_device->createBuffer(bufferDesc);
 
 	// Upload the initial value of the uniforms
 	m_uniforms.viewMatrix = glm::lookAt(vec3(-2.0f, -3.0f, 2.0f), vec3(0.0f), vec3(0, 0, 1));
@@ -468,17 +455,16 @@ bool Application::initUniforms() {
 	m_uniforms.gamma = textureFormatGamma(m_surfaceFormat);
 	float grey = std::pow(0.25, textureFormatGamma(m_surfaceFormat));
 	m_uniforms.worldColor = { grey, grey,grey, 1.0 };
-	m_queue.writeBuffer(m_uniformBuffer, 0, &m_uniforms, sizeof(GlobalUniforms));
+	m_queue->writeBuffer(*m_uniformBuffer, 0, &m_uniforms, sizeof(GlobalUniforms));
 
 	updateProjectionMatrix();
 	updateViewMatrix();
 
-	return m_uniformBuffer != nullptr;
+	return m_uniformBuffer;
 }
 
 void Application::terminateUniforms() {
-	m_uniformBuffer.destroy();
-	m_uniformBuffer.release();
+	m_uniformBuffer->destroy();
 }
 
 bool Application::initLightingUniforms() {
@@ -487,7 +473,7 @@ bool Application::initLightingUniforms() {
 	bufferDesc.size = sizeof(LightingUniforms);
 	bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
 	bufferDesc.mappedAtCreation = false;
-	m_lightingUniformBuffer = m_device.createBuffer(bufferDesc);
+	m_lightingUniformBuffer = m_device->createBuffer(bufferDesc);
 
 	// Initial values
 	m_lightingUniforms.directions[0] = { 0.5f, -0.9f, 0.1f, 0.0f };
@@ -497,21 +483,19 @@ bool Application::initLightingUniforms() {
 
 	updateLightingUniforms();
 
-	return m_lightingUniformBuffer != nullptr;
+	return m_lightingUniformBuffer;
 }
 
 void Application::terminateLightingUniforms() {
-	m_lightingUniformBuffer.destroy();
-	m_lightingUniformBuffer.release();
+	m_lightingUniformBuffer->destroy();
 }
 
 void Application::updateLightingUniforms() {
 	if (m_lightingUniformsChanged) {
-		m_queue.writeBuffer(m_lightingUniformBuffer, 0, &m_lightingUniforms, sizeof(LightingUniforms));
+		m_queue->writeBuffer(*m_lightingUniformBuffer, 0, &m_lightingUniforms, sizeof(LightingUniforms));
 		m_lightingUniformsChanged = false;
 	}
 }
-
 
 bool Application::initBindGroupLayouts() {
 	{
@@ -535,7 +519,7 @@ bool Application::initBindGroupLayouts() {
 		BindGroupLayoutDescriptor bindGroupLayoutDesc{};
 		bindGroupLayoutDesc.entryCount = (uint32_t)bindGroupLayoutEntries.size();
 		bindGroupLayoutDesc.entries = bindGroupLayoutEntries.data();
-		m_bindGroupLayout = m_device.createBindGroupLayout(bindGroupLayoutDesc);
+		m_bindGroupLayout = m_device->createBindGroupLayout(bindGroupLayoutDesc);
 	}
 
 	// Material bind group
@@ -584,7 +568,7 @@ bool Application::initBindGroupLayouts() {
 		bindGroupLayoutDesc.label = "Material";
 		bindGroupLayoutDesc.entryCount = (uint32_t)bindGroupLayoutEntries.size();
 		bindGroupLayoutDesc.entries = bindGroupLayoutEntries.data();
-		m_materialBindGroupLayout = m_device.createBindGroupLayout(bindGroupLayoutDesc);
+		m_materialBindGroupLayout = m_device->createBindGroupLayout(bindGroupLayoutDesc);
 	}
 
 	// Material bind group
@@ -600,47 +584,37 @@ bool Application::initBindGroupLayouts() {
 		bindGroupLayoutDesc.label = "Node";
 		bindGroupLayoutDesc.entryCount = (uint32_t)bindGroupLayoutEntries.size();
 		bindGroupLayoutDesc.entries = bindGroupLayoutEntries.data();
-		m_nodeBindGroupLayout = m_device.createBindGroupLayout(bindGroupLayoutDesc);
+		m_nodeBindGroupLayout = m_device->createBindGroupLayout(bindGroupLayoutDesc);
 	}
 
 	return (
-		m_bindGroupLayout != nullptr &&
-		m_materialBindGroupLayout != nullptr &&
-		m_nodeBindGroupLayout != nullptr
+		m_bindGroupLayout &&
+		m_materialBindGroupLayout &&
+		m_nodeBindGroupLayout
 		);
 }
-
-void Application::terminateBindGroupLayouts() {
-	m_bindGroupLayout.release();
-	m_materialBindGroupLayout.release();
-}
-
 
 bool Application::initBindGroup() {
 	// Create a binding
 	std::vector<BindGroupEntry> bindings(2);
 
 	bindings[0].binding = 0;
-	bindings[0].buffer = m_uniformBuffer;
+	bindings[0].buffer = *m_uniformBuffer;
 	bindings[0].offset = 0;
 	bindings[0].size = sizeof(GlobalUniforms);
 
 	bindings[1].binding = 1;
-	bindings[1].buffer = m_lightingUniformBuffer;
+	bindings[1].buffer = *m_lightingUniformBuffer;
 	bindings[1].offset = 0;
 	bindings[1].size = sizeof(LightingUniforms);
 
 	BindGroupDescriptor bindGroupDesc;
-	bindGroupDesc.layout = m_bindGroupLayout;
+	bindGroupDesc.layout = *m_bindGroupLayout;
 	bindGroupDesc.entryCount = (uint32_t)bindings.size();
 	bindGroupDesc.entries = bindings.data();
-	m_bindGroup = m_device.createBindGroup(bindGroupDesc);
+	m_bindGroup = m_device->createBindGroup(bindGroupDesc);
 
-	return m_bindGroup != nullptr;
-}
-
-void Application::terminateBindGroup() {
-	m_bindGroup.release();
+	return m_bindGroup;
 }
 
 void Application::updateProjectionMatrix() {
@@ -649,8 +623,8 @@ void Application::updateProjectionMatrix() {
 	glfwGetFramebufferSize(m_window, &width, &height);
 	float ratio = width / (float)height;
 	m_uniforms.projectionMatrix = glm::perspective(45 * PI / 180, ratio, 0.01f, 100.0f);
-	m_queue.writeBuffer(
-		m_uniformBuffer,
+	m_queue->writeBuffer(
+		*m_uniformBuffer,
 		offsetof(GlobalUniforms, projectionMatrix),
 		&m_uniforms.projectionMatrix,
 		sizeof(GlobalUniforms::projectionMatrix)
@@ -664,26 +638,26 @@ void Application::updateViewMatrix() {
 	float sy = sin(m_cameraState.angles.y);
 	vec3 position = vec3(cx * cy, sx * cy, sy) * std::exp(-m_cameraState.zoom);
 	m_uniforms.viewMatrix = glm::lookAt(position, vec3(0.0f), vec3(0, 0, 1));
-	m_queue.writeBuffer(
-		m_uniformBuffer,
+	m_queue->writeBuffer(
+		*m_uniformBuffer,
 		offsetof(GlobalUniforms, viewMatrix),
 		&m_uniforms.viewMatrix,
 		sizeof(GlobalUniforms::viewMatrix)
 	);
 
 	m_uniforms.cameraWorldPosition = position;
-	m_queue.writeBuffer(
-		m_uniformBuffer,
+	m_queue->writeBuffer(
+		*m_uniformBuffer,
 		offsetof(GlobalUniforms, cameraWorldPosition),
 		&m_uniforms.cameraWorldPosition,
 		sizeof(GlobalUniforms::cameraWorldPosition)
 	);
 }
 
-wgpu::TextureView Application::getNextSurfaceTextureView()
+TextureView Application::getNextSurfaceTextureView()
 {
 	SurfaceTexture surfaceTexture;
-	m_surface.getCurrentTexture(&surfaceTexture);
+	m_surface->getCurrentTexture(&surfaceTexture);
 
 	if (surfaceTexture.status != WGPUSurfaceGetCurrentTextureStatus_Success)
 	{

@@ -3,6 +3,7 @@
 #include "resource-loaders/tiny_gltf.h"
 
 #include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 #include <glm/glm/glm.hpp>
 
 #include <vector>
@@ -53,7 +54,6 @@ private:
 	// destroy() has just been called.
 
 	void initDevice(wgpu::Device device);
-	void terminateDevice();
 
 	void initBuffers(const tinygltf::Model& model);
 	void terminateBuffers();
@@ -75,16 +75,16 @@ private:
 
 private:
 	// Device
-	wgpu::Device m_device = nullptr;
-	wgpu::Queue m_queue = nullptr;
+	wgpu::raii::Device m_device;
+	wgpu::raii::Queue m_queue;
 
 	// Buffers
-	std::vector<wgpu::Buffer> m_buffers;
-	wgpu::Buffer m_nullBuffer = nullptr; // for attributes that are not provided
+	std::vector<wgpu::raii::Buffer> m_buffers;
+	wgpu::raii::Buffer m_nullBuffer; // for attributes that are not provided
 
 	// Texture
 	std::vector<wgpu::Texture> m_textures;
-	std::vector<wgpu::TextureView> m_textureViews;
+	std::vector<wgpu::raii::TextureView> m_textureViews;
 	uint32_t m_defaultTextureIdx; // empty texture bound for materials that do not use a texture
 	// This is what GLTF calls a texture, as opposed to wgpu::Texture that corresponds to gltf::Image
 	struct SampledTexture {
@@ -94,12 +94,12 @@ private:
 	std::vector<SampledTexture> m_sampledTextures;
 
 	// Samplers
-	std::vector<wgpu::Sampler> m_samplers;
+	std::vector<wgpu::raii::Sampler> m_samplers;
 	uint32_t m_defaultSamplerIdx;
 
 	// Materials
 	struct Material {
-		wgpu::BindGroup bindGroup = nullptr;
+		wgpu::raii::BindGroup bindGroup;
 		wgpu::Buffer uniformBuffer = nullptr;
 		MaterialUniforms uniforms;
 	};
@@ -140,7 +140,7 @@ private:
 
 	// Nodes
 	struct Node {
-		wgpu::BindGroup bindGroup = nullptr;
+		wgpu::raii::BindGroup bindGroup;
 		wgpu::Buffer uniformBuffer = nullptr;
 		NodeUniforms uniforms;
 		uint32_t meshIndex;

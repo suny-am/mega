@@ -37,23 +37,23 @@ void GpuScene::createFromModel(
 void GpuScene::draw(wgpu::RenderPassEncoder renderPass, uint32_t renderPipelineIndex) {
 	for (const Node& node : m_nodes) {
 		const Mesh& mesh = m_meshes[node.meshIndex];
-		renderPass.setBindGroup(2, node.bindGroup, 0, nullptr);
+		renderPass.setBindGroup(2, *node.bindGroup, 0, nullptr);
 		for (const MeshPrimitive& prim : mesh.primitives) {
 			if (prim.renderPipelineIndex != renderPipelineIndex) continue;
 			for (size_t layoutIdx = 0; layoutIdx < prim.attributeBufferViews.size(); ++layoutIdx) {
 				const auto& view = prim.attributeBufferViews[layoutIdx];
 				uint32_t slot = static_cast<uint32_t>(layoutIdx);
 				if (view.bufferIndex != WGPU_LIMIT_U32_UNDEFINED) {
-					renderPass.setVertexBuffer(slot, m_buffers[view.bufferIndex], view.byteOffset, view.byteLength);
+					renderPass.setVertexBuffer(slot, *m_buffers[view.bufferIndex], view.byteOffset, view.byteLength);
 				}
 				else {
-					renderPass.setVertexBuffer(slot, m_nullBuffer, 0, 4 * sizeof(float));
+					renderPass.setVertexBuffer(slot, *m_nullBuffer, 0, 4 * sizeof(float));
 				}
 			}
-			renderPass.setBindGroup(1, m_materials[prim.materialIndex].bindGroup, 0, nullptr);
+			renderPass.setBindGroup(1, *m_materials[prim.materialIndex].bindGroup, 0, nullptr);
 			assert(prim.indexBufferView.byteStride == 0 || prim.indexBufferView.byteStride == indexFormatByteSize(prim.indexFormat));
 			renderPass.setIndexBuffer(
-				m_buffers[prim.indexBufferView.bufferIndex],
+				*m_buffers[prim.indexBufferView.bufferIndex],
 				prim.indexFormat,
 				prim.indexBufferView.byteOffset + prim.indexBufferByteOffset,
 				prim.indexBufferView.byteLength
@@ -70,27 +70,14 @@ void GpuScene::destroy() {
 	terminateSamplers();
 	terminateTextures();
 	terminateBuffers();
-	terminateDevice();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Private methods
 
 void GpuScene::initDevice(wgpu::Device device) {
-	m_device = device;
-	m_device.reference();
-	m_queue = m_device.getQueue();
-}
-
-void GpuScene::terminateDevice() {
-	if (m_queue) {
-		m_queue.release();
-		m_queue = nullptr;
-	}
-	if (m_device) {
-		m_device.release();
-		m_device = nullptr;
-	}
+	m_device = std::move(device);
+	m_queue = m_device->getQueue();
 }
 
 void GpuScene::initBuffers(const tinygltf::Model& model) {
@@ -99,9 +86,9 @@ void GpuScene::initBuffers(const tinygltf::Model& model) {
 		bufferDesc.label = buffer.name.c_str();
 		bufferDesc.size = alignToNextMultipleOf(static_cast<uint32_t>(buffer.data.size()), 4);
 		bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex | BufferUsage::Index;
-		wgpu::Buffer gpuBuffer = m_device.createBuffer(bufferDesc);
-		m_buffers.push_back(gpuBuffer);
-		m_queue.writeBuffer(gpuBuffer, 0, buffer.data.data(), bufferDesc.size);
+		wgpu::Buffer gpuBuffer = m_device->createBuffer(bufferDesc);
+		m_buffers.push_back(std::move(gpuBuffer));
+		m_queue->writeBuffer(gpuBuffer, 0, buffer.data.data(), bufferDesc.size);
 	}
 
 	{
@@ -109,22 +96,19 @@ void GpuScene::initBuffers(const tinygltf::Model& model) {
 		bufferDesc.label = "Null Buffer";
 		bufferDesc.size = static_cast<uint32_t>(4 * sizeof(float));
 		bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex | BufferUsage::Index;
-		m_nullBuffer = m_device.createBuffer(bufferDesc);
+		m_nullBuffer = m_device->createBuffer(bufferDesc);
 	}
 }
 
 void GpuScene::terminateBuffers() {
-	for (wgpu::Buffer b : m_buffers) {
-		b.destroy();
-		b.release();
+	for (wgpu::raii::Buffer b : m_buffers) {
+		b->destroy();
 	}
 	m_buffers.clear();
 
 	if (m_nullBuffer) {
-		m_nullBuffer.destroy();
-		m_nullBuffer.release();
+		m_nullBuffer->destroy();
 	}
-	m_nullBuffer = nullptr;
 }
 
 void GpuScene::initTextures(const tinygltf::Model& model) {
@@ -135,12 +119,12 @@ void GpuScene::initTextures(const tinygltf::Model& model) {
 		desc.dimension = TextureDimension::_2D;
 		desc.format = textureFormatToFloatFormat(textureFormatFromGltfImage(image));
 		desc.sampleCount = 1;
-		desc.size = { static_cast<uint32_t>(image.width) , static_cast<uint32_t>(image.height), 1};
+		desc.size = { static_cast<uint32_t>(image.width) , static_cast<uint32_t>(image.height), 1 };
 		desc.mipLevelCount = 1;// maxMipLevelCount2D(desc.size); // TODO -> upload mipmaps
 		desc.usage = TextureUsage::CopyDst | TextureUsage::TextureBinding;
 		desc.viewFormatCount = 0;
 		desc.viewFormats = nullptr;
-		wgpu::Texture gpuTexture = m_device.createTexture(desc);
+		wgpu::Texture gpuTexture = m_device->createTexture(desc);
 		m_textures.push_back(gpuTexture);
 
 		// View
@@ -154,7 +138,7 @@ void GpuScene::initTextures(const tinygltf::Model& model) {
 		viewDesc.dimension = TextureViewDimension::_2D;
 		viewDesc.format = desc.format;
 		wgpu::TextureView gpuTextureView = gpuTexture.createView(viewDesc);
-		m_textureViews.push_back(gpuTextureView);
+		m_textureViews.push_back(std::move(gpuTextureView));
 
 		// Upload
 		ImageCopyTexture destination;
@@ -167,7 +151,7 @@ void GpuScene::initTextures(const tinygltf::Model& model) {
 		uint32_t bitsPerPixel = textureFormatBitsPerTexel(desc.format);
 		sourceLayout.bytesPerRow = bitsPerPixel * desc.size.width / 8;
 		sourceLayout.rowsPerImage = desc.size.height;
-		m_queue.writeTexture(destination, image.image.data(), image.image.size(), sourceLayout, desc.size);
+		m_queue->writeTexture(destination, image.image.data(), image.image.size(), sourceLayout, desc.size);
 	}
 
 	// Default texture
@@ -184,7 +168,7 @@ void GpuScene::initTextures(const tinygltf::Model& model) {
 		desc.usage = TextureUsage::CopyDst | TextureUsage::TextureBinding;
 		desc.viewFormatCount = 0;
 		desc.viewFormats = nullptr;
-		wgpu::Texture gpuTexture = m_device.createTexture(desc);
+		wgpu::Texture gpuTexture = m_device->createTexture(desc);
 		m_textures.push_back(gpuTexture);
 
 		// View
@@ -198,7 +182,7 @@ void GpuScene::initTextures(const tinygltf::Model& model) {
 		viewDesc.dimension = TextureViewDimension::_2D;
 		viewDesc.format = desc.format;
 		wgpu::TextureView gpuTextureView = gpuTexture.createView(viewDesc);
-		m_textureViews.push_back(gpuTextureView);
+		m_textureViews.push_back(std::move(gpuTextureView));
 
 		// Upload
 		ImageCopyTexture destination;
@@ -212,22 +196,19 @@ void GpuScene::initTextures(const tinygltf::Model& model) {
 		sourceLayout.bytesPerRow = bitsPerPixel * desc.size.width / 8;
 		sourceLayout.rowsPerImage = desc.size.height;
 		uint32_t data = 0;
-		m_queue.writeTexture(destination, &data, 4, sourceLayout, desc.size);
+		m_queue->writeTexture(destination, &data, 4, sourceLayout, desc.size);
 	}
 
 	for (const tinygltf::Texture& texture : model.textures) {
 		m_sampledTextures.push_back(SampledTexture{
 			static_cast<uint32_t>(texture.source),
 			static_cast<uint32_t>(texture.sampler),
-		});
+									});
 	}
 }
 
 void GpuScene::terminateTextures() {
 	m_sampledTextures.clear();
-	for (wgpu::TextureView v : m_textureViews) {
-		v.release();
-	}
 	m_textureViews.clear();
 	for (wgpu::Texture t : m_textures) {
 		t.destroy();
@@ -249,18 +230,15 @@ void GpuScene::initSamplers(const tinygltf::Model& model) {
 		desc.lodMinClamp = 0.0;
 		desc.lodMaxClamp = 1.0;
 		desc.maxAnisotropy = 1.0;
-		m_samplers.push_back(m_device.createSampler(desc));
+		m_samplers.push_back(m_device->createSampler(desc));
 	}
 
 	m_defaultSamplerIdx = static_cast<uint32_t>(m_samplers.size());
 	desc.label = "Default";
-	m_samplers.push_back(m_device.createSampler(desc));
+	m_samplers.push_back(m_device->createSampler(desc));
 }
 
 void GpuScene::terminateSamplers() {
-	for (wgpu::Sampler s : m_samplers) {
-		s.release();
-	}
 	m_samplers.clear();
 }
 
@@ -298,7 +276,7 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 		bufferDesc.mappedAtCreation = false;
 		bufferDesc.usage = BufferUsage::Uniform | BufferUsage::CopyDst;
 		bufferDesc.size = sizeof(MaterialUniforms);
-		gpuMaterial.uniformBuffer = m_device.createBuffer(bufferDesc);
+		gpuMaterial.uniformBuffer = m_device->createBuffer(bufferDesc);
 
 		// Uniform Values
 		gpuMaterial.uniforms.baseColorFactor = glm::make_vec4(material.pbrMetallicRoughness.baseColorFactor.data());
@@ -316,7 +294,7 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 			normalTextureIdx >= 0
 			? static_cast<uint32_t>(material.normalTexture.texCoord)
 			: WGPU_LIMIT_U32_UNDEFINED;
-		m_queue.writeBuffer(gpuMaterial.uniformBuffer, 0, &gpuMaterial.uniforms, sizeof(MaterialUniforms));
+		m_queue->writeBuffer(gpuMaterial.uniformBuffer, 0, &gpuMaterial.uniforms, sizeof(MaterialUniforms));
 
 		// Bind Group
 		std::vector<BindGroupEntry> bindGroupEntries(7, Default);
@@ -326,34 +304,34 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 
 		bindGroupEntries[1].binding = 1;
 		int idx = baseColorTextureIdx >= 0 ? baseColorTextureIdx : m_defaultTextureIdx;
-		bindGroupEntries[1].textureView = m_textureViews[idx];
+		bindGroupEntries[1].textureView = *m_textureViews[idx];
 
 		bindGroupEntries[2].binding = 2;
 		idx = baseColorSamplerIdx >= 0 ? baseColorSamplerIdx : m_defaultSamplerIdx;
-		bindGroupEntries[2].sampler = m_samplers[idx];
+		bindGroupEntries[2].sampler = *m_samplers[idx];
 
 		bindGroupEntries[3].binding = 3;
 		idx = metallicRoughnessTextureIdx >= 0 ? metallicRoughnessTextureIdx : m_defaultTextureIdx;
-		bindGroupEntries[3].textureView = m_textureViews[idx];
+		bindGroupEntries[3].textureView = *m_textureViews[idx];
 
 		bindGroupEntries[4].binding = 4;
 		idx = metallicRoughnessSamplerIdx >= 0 ? metallicRoughnessSamplerIdx : m_defaultSamplerIdx;
-		bindGroupEntries[4].sampler = m_samplers[idx];
+		bindGroupEntries[4].sampler = *m_samplers[idx];
 
 		bindGroupEntries[5].binding = 5;
 		idx = normalTextureIdx >= 0 ? normalTextureIdx : m_defaultTextureIdx;
-		bindGroupEntries[5].textureView = m_textureViews[idx];
+		bindGroupEntries[5].textureView = *m_textureViews[idx];
 
 		bindGroupEntries[6].binding = 6;
 		idx = normalSamplerIdx >= 0 ? normalSamplerIdx : m_defaultSamplerIdx;
-		bindGroupEntries[6].sampler = m_samplers[idx];
+		bindGroupEntries[6].sampler = *m_samplers[idx];
 
 		BindGroupDescriptor bindGroupDesc;
 		bindGroupDesc.label = material.name.c_str();
 		bindGroupDesc.entryCount = static_cast<uint32_t>(bindGroupEntries.size());
 		bindGroupDesc.entries = bindGroupEntries.data();
 		bindGroupDesc.layout = bindGroupLayout;
-		gpuMaterial.bindGroup = m_device.createBindGroup(bindGroupDesc);
+		gpuMaterial.bindGroup = m_device->createBindGroup(bindGroupDesc);
 
 		m_materials.push_back(gpuMaterial);
 	}
@@ -369,14 +347,14 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 		bufferDesc.mappedAtCreation = false;
 		bufferDesc.usage = BufferUsage::Uniform | BufferUsage::CopyDst;
 		bufferDesc.size = sizeof(MaterialUniforms);
-		gpuMaterial.uniformBuffer = m_device.createBuffer(bufferDesc);
+		gpuMaterial.uniformBuffer = m_device->createBuffer(bufferDesc);
 
 		// Uniform Values
-		gpuMaterial.uniforms.baseColorFactor = {1.0, 0.5, 0.5, 1.0};
+		gpuMaterial.uniforms.baseColorFactor = { 1.0, 0.5, 0.5, 1.0 };
 		gpuMaterial.uniforms.metallicFactor = 0.0;
 		gpuMaterial.uniforms.roughnessFactor = 0.2;
 		gpuMaterial.uniforms.baseColorTexCoords = WGPU_LIMIT_U32_UNDEFINED;
-		m_queue.writeBuffer(gpuMaterial.uniformBuffer, 0, &gpuMaterial.uniforms, sizeof(MaterialUniforms));
+		m_queue->writeBuffer(gpuMaterial.uniformBuffer, 0, &gpuMaterial.uniforms, sizeof(MaterialUniforms));
 
 		// Bind Group
 		std::vector<BindGroupEntry> bindGroupEntries(7, Default);
@@ -385,29 +363,29 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 		bindGroupEntries[0].size = sizeof(MaterialUniforms);
 
 		bindGroupEntries[1].binding = 1;
-		bindGroupEntries[1].textureView = m_textureViews[m_defaultTextureIdx];
+		bindGroupEntries[1].textureView = *m_textureViews[m_defaultTextureIdx];
 
 		bindGroupEntries[2].binding = 2;
-		bindGroupEntries[2].sampler = m_samplers[m_defaultSamplerIdx];
+		bindGroupEntries[2].sampler = *m_samplers[m_defaultSamplerIdx];
 
 		bindGroupEntries[3].binding = 3;
-		bindGroupEntries[3].textureView = m_textureViews[m_defaultTextureIdx];
+		bindGroupEntries[3].textureView = *m_textureViews[m_defaultTextureIdx];
 
 		bindGroupEntries[4].binding = 4;
-		bindGroupEntries[4].sampler = m_samplers[m_defaultSamplerIdx];
+		bindGroupEntries[4].sampler = *m_samplers[m_defaultSamplerIdx];
 
 		bindGroupEntries[5].binding = 5;
-		bindGroupEntries[5].textureView = m_textureViews[m_defaultTextureIdx];
+		bindGroupEntries[5].textureView = *m_textureViews[m_defaultTextureIdx];
 
 		bindGroupEntries[6].binding = 6;
-		bindGroupEntries[6].sampler = m_samplers[m_defaultSamplerIdx];
+		bindGroupEntries[6].sampler = *m_samplers[m_defaultSamplerIdx];
 
 		BindGroupDescriptor bindGroupDesc;
 		bindGroupDesc.label = "Default Material";
 		bindGroupDesc.entryCount = static_cast<uint32_t>(bindGroupEntries.size());
 		bindGroupDesc.entries = bindGroupEntries.data();
 		bindGroupDesc.layout = bindGroupLayout;
-		gpuMaterial.bindGroup = m_device.createBindGroup(bindGroupDesc);
+		gpuMaterial.bindGroup = m_device->createBindGroup(bindGroupDesc);
 
 		m_materials.push_back(gpuMaterial);
 	}
@@ -415,7 +393,6 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 
 void GpuScene::terminateMaterials() {
 	for (Material& mat : m_materials) {
-		mat.bindGroup.release();
 		mat.uniformBuffer.destroy();
 		mat.uniformBuffer.release();
 	}
@@ -441,11 +418,11 @@ void GpuScene::initNodes(const tinygltf::Model& model, BindGroupLayout bindGroup
 				bufferDesc.mappedAtCreation = false;
 				bufferDesc.usage = BufferUsage::Uniform | BufferUsage::CopyDst;
 				bufferDesc.size = sizeof(NodeUniforms);
-				gpuNode.uniformBuffer = m_device.createBuffer(bufferDesc);
+				gpuNode.uniformBuffer = m_device->createBuffer(bufferDesc);
 
 				// Uniform Values
 				gpuNode.uniforms.modelMatrix = globalTransform;
-				m_queue.writeBuffer(gpuNode.uniformBuffer, 0, &gpuNode.uniforms, sizeof(NodeUniforms));
+				m_queue->writeBuffer(gpuNode.uniformBuffer, 0, &gpuNode.uniforms, sizeof(NodeUniforms));
 
 				// Bind Group
 				std::vector<BindGroupEntry> bindGroupEntries(1, Default);
@@ -458,7 +435,7 @@ void GpuScene::initNodes(const tinygltf::Model& model, BindGroupLayout bindGroup
 				bindGroupDesc.entryCount = static_cast<uint32_t>(bindGroupEntries.size());
 				bindGroupDesc.entries = bindGroupEntries.data();
 				bindGroupDesc.layout = bindGroupLayout;
-				gpuNode.bindGroup = m_device.createBindGroup(bindGroupDesc);
+				gpuNode.bindGroup = m_device->createBindGroup(bindGroupDesc);
 
 				m_nodes.push_back(gpuNode);
 			}
@@ -466,7 +443,7 @@ void GpuScene::initNodes(const tinygltf::Model& model, BindGroupLayout bindGroup
 			// Recursive call
 			addNodes(node.children, globalTransform);
 		}
-	};
+		};
 
 	const tinygltf::Scene& scene = model.scenes[model.defaultScene];
 	std::cout << "Loading scene '" << scene.name << "'..." << std::endl;
@@ -481,7 +458,6 @@ void GpuScene::initNodes(const tinygltf::Model& model, BindGroupLayout bindGroup
 
 void GpuScene::terminateNodes() {
 	for (Node& node : m_nodes) {
-		node.bindGroup.release();
 		node.uniformBuffer.destroy();
 		node.uniformBuffer.release();
 	}
@@ -510,7 +486,7 @@ void GpuScene::initDrawCalls(const tinygltf::Model& model) {
 			gpuBufferViewLut[view] = idx;
 			return idx;
 		}
-	};
+		};
 
 	for (const tinygltf::Mesh& mesh : model.meshes) {
 		Mesh gpuMesh;
@@ -553,7 +529,7 @@ void GpuScene::initDrawCalls(const tinygltf::Model& model) {
 					uint64_t bufferByteOffset = bufferView.byteOffset;
 
 					// Prevent attribute offset from being larger than the stride
-					uint64_t x = (attrByteOffset / byteStride)* byteStride;
+					uint64_t x = (attrByteOffset / byteStride) * byteStride;
 					attrByteOffset -= x;
 					bufferByteOffset += x;
 
@@ -562,7 +538,7 @@ void GpuScene::initDrawCalls(const tinygltf::Model& model) {
 						bufferByteOffset,
 						bufferView.byteLength,
 						byteStride
-					});
+																	 });
 				}
 
 				// Group attributes by bufferView
@@ -616,7 +592,7 @@ void GpuScene::initDrawCalls(const tinygltf::Model& model) {
 				static_cast<uint32_t>(indexAccessor.count),
 				prim.material >= 0 ? static_cast<uint32_t>(prim.material) : m_defaultMaterialIdx,
 				getOrCreateRenderPipelineIndex(renderPipelineSettings)
-			});
+										 });
 		}
 		m_meshes.push_back(std::move(gpuMesh));
 	}

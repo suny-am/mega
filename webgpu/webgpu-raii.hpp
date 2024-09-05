@@ -108,5 +108,5 @@ namespace wgpu {
         using QuerySet = wgpu::raii::Wrapper<wgpu::QuerySet>;
         // TODO: Add other types
 
-    } // namespace raii
-} // namespace wgpu
+    } 
+}
