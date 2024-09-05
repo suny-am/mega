@@ -44,7 +44,7 @@ void GpuScene::draw(wgpu::RenderPassEncoder renderPass, uint32_t renderPipelineI
 				const auto& view = prim.attributeBufferViews[layoutIdx];
 				uint32_t slot = static_cast<uint32_t>(layoutIdx);
 				if (view.bufferIndex != WGPU_LIMIT_U32_UNDEFINED) {
-					renderPass.setVertexBuffer(slot, m_buffers[view.bufferIndex], view.byteOffset, view.byteLength);
+					renderPass.setVertexBuffer(slot, *m_buffers[view.bufferIndex], view.byteOffset, view.byteLength);
 				}
 				else {
 					renderPass.setVertexBuffer(slot, *m_nullBuffer, 0, 4 * sizeof(float));
@@ -53,7 +53,7 @@ void GpuScene::draw(wgpu::RenderPassEncoder renderPass, uint32_t renderPipelineI
 			renderPass.setBindGroup(1, m_materials[prim.materialIndex].bindGroup, 0, nullptr);
 			assert(prim.indexBufferView.byteStride == 0 || prim.indexBufferView.byteStride == indexFormatByteSize(prim.indexFormat));
 			renderPass.setIndexBuffer(
-				m_buffers[prim.indexBufferView.bufferIndex],
+				*m_buffers[prim.indexBufferView.bufferIndex],
 				prim.indexFormat,
 				prim.indexBufferView.byteOffset + prim.indexBufferByteOffset,
 				prim.indexBufferView.byteLength
@@ -80,7 +80,6 @@ void GpuScene::initDevice(wgpu::Device device) {
 	m_queue = m_device->getQueue();
 }
 
-
 void GpuScene::initBuffers(const tinygltf::Model& model) {
 	for (const tinygltf::Buffer& buffer : model.buffers) {
 		BufferDescriptor bufferDesc = Default;
@@ -88,7 +87,7 @@ void GpuScene::initBuffers(const tinygltf::Model& model) {
 		bufferDesc.size = alignToNextMultipleOf(static_cast<uint32_t>(buffer.data.size()), 4);
 		bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex | BufferUsage::Index;
 		wgpu::Buffer gpuBuffer = m_device->createBuffer(bufferDesc);
-		m_buffers.push_back(gpuBuffer);
+		m_buffers.push_back(std::move(gpuBuffer));
 		m_queue->writeBuffer(gpuBuffer, 0, buffer.data.data(), bufferDesc.size);
 	}
 
@@ -102,9 +101,8 @@ void GpuScene::initBuffers(const tinygltf::Model& model) {
 }
 
 void GpuScene::terminateBuffers() {
-	for (wgpu::Buffer b : m_buffers) {
-		b.destroy();
-		b.release();
+	for (wgpu::raii::Buffer b : m_buffers) {
+		b->destroy();
 	}
 	m_buffers.clear();
 
@@ -121,7 +119,7 @@ void GpuScene::initTextures(const tinygltf::Model& model) {
 		desc.dimension = TextureDimension::_2D;
 		desc.format = textureFormatToFloatFormat(textureFormatFromGltfImage(image));
 		desc.sampleCount = 1;
-		desc.size = { static_cast<uint32_t>(image.width) , static_cast<uint32_t>(image.height), 1};
+		desc.size = { static_cast<uint32_t>(image.width) , static_cast<uint32_t>(image.height), 1 };
 		desc.mipLevelCount = 1;// maxMipLevelCount2D(desc.size); // TODO -> upload mipmaps
 		desc.usage = TextureUsage::CopyDst | TextureUsage::TextureBinding;
 		desc.viewFormatCount = 0;
@@ -205,7 +203,7 @@ void GpuScene::initTextures(const tinygltf::Model& model) {
 		m_sampledTextures.push_back(SampledTexture{
 			static_cast<uint32_t>(texture.source),
 			static_cast<uint32_t>(texture.sampler),
-		});
+									});
 	}
 }
 
@@ -358,7 +356,7 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 		gpuMaterial.uniformBuffer = m_device->createBuffer(bufferDesc);
 
 		// Uniform Values
-		gpuMaterial.uniforms.baseColorFactor = {1.0, 0.5, 0.5, 1.0};
+		gpuMaterial.uniforms.baseColorFactor = { 1.0, 0.5, 0.5, 1.0 };
 		gpuMaterial.uniforms.metallicFactor = 0.0;
 		gpuMaterial.uniforms.roughnessFactor = 0.2;
 		gpuMaterial.uniforms.baseColorTexCoords = WGPU_LIMIT_U32_UNDEFINED;
@@ -452,7 +450,7 @@ void GpuScene::initNodes(const tinygltf::Model& model, BindGroupLayout bindGroup
 			// Recursive call
 			addNodes(node.children, globalTransform);
 		}
-	};
+		};
 
 	const tinygltf::Scene& scene = model.scenes[model.defaultScene];
 	std::cout << "Loading scene '" << scene.name << "'..." << std::endl;
@@ -496,7 +494,7 @@ void GpuScene::initDrawCalls(const tinygltf::Model& model) {
 			gpuBufferViewLut[view] = idx;
 			return idx;
 		}
-	};
+		};
 
 	for (const tinygltf::Mesh& mesh : model.meshes) {
 		Mesh gpuMesh;
@@ -539,7 +537,7 @@ void GpuScene::initDrawCalls(const tinygltf::Model& model) {
 					uint64_t bufferByteOffset = bufferView.byteOffset;
 
 					// Prevent attribute offset from being larger than the stride
-					uint64_t x = (attrByteOffset / byteStride)* byteStride;
+					uint64_t x = (attrByteOffset / byteStride) * byteStride;
 					attrByteOffset -= x;
 					bufferByteOffset += x;
 
@@ -548,7 +546,7 @@ void GpuScene::initDrawCalls(const tinygltf::Model& model) {
 						bufferByteOffset,
 						bufferView.byteLength,
 						byteStride
-					});
+																	 });
 				}
 
 				// Group attributes by bufferView
@@ -602,7 +600,7 @@ void GpuScene::initDrawCalls(const tinygltf::Model& model) {
 				static_cast<uint32_t>(indexAccessor.count),
 				prim.material >= 0 ? static_cast<uint32_t>(prim.material) : m_defaultMaterialIdx,
 				getOrCreateRenderPipelineIndex(renderPipelineSettings)
-			});
+										 });
 		}
 		m_meshes.push_back(std::move(gpuMesh));
 	}

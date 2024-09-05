@@ -79,7 +79,7 @@ private:
 	wgpu::raii::Queue m_queue;
 
 	// Buffers
-	std::vector<wgpu::Buffer> m_buffers;
+	std::vector<wgpu::raii::Buffer> m_buffers;
 	wgpu::raii::Buffer m_nullBuffer; // for attributes that are not provided
 
 	// Texture
