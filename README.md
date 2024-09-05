@@ -189,21 +189,26 @@ TBD
 <!-- ROADMAP -->
 ## Roadmap
 
-- [x] Basic render pipeline
-- [x] Read geometry from file
-- [x] Read texture from file
+- [ ] File parsing
+  - [x] Load .obj
+  - [x] Load .gltf/glb
+  - [ ] native file dialog
+  - [ ] TBD (🚧)
 - [ ] Dynamics
   - [x] World color
-  - [x] Diffuse
-  - [x] Specular
-  - [x] Normal
-  - [x] Lighting
-- [x] Dear ImGui integration
+- [ ] Shaders
+  - [x] BRDF
+  - [ ] TBD (🚧)
+- [ ] UI
+  - [x] Dear ImGui integration
+  - [ ] ImGuizmo integration
+  - [ ] TBD (🚧)
 - [ ] Camera control
   - [x] Orbit (turntable)
   - [x] Zoom
   - [ ] Pan
-- [ ] TBD
+  - [ ] TBD (🚧)
+- [ ] TBD (🚧)
 
 <p align="right"><a href="#readme-top">🔝</a></p>
 
