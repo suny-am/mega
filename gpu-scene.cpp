@@ -239,9 +239,6 @@ void GpuScene::initSamplers(const tinygltf::Model& model) {
 }
 
 void GpuScene::terminateSamplers() {
-	for (wgpu::Sampler s : m_samplers) {
-		s.release();
-	}
 	m_samplers.clear();
 }
 
@@ -311,7 +308,7 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 
 		bindGroupEntries[2].binding = 2;
 		idx = baseColorSamplerIdx >= 0 ? baseColorSamplerIdx : m_defaultSamplerIdx;
-		bindGroupEntries[2].sampler = m_samplers[idx];
+		bindGroupEntries[2].sampler = *m_samplers[idx];
 
 		bindGroupEntries[3].binding = 3;
 		idx = metallicRoughnessTextureIdx >= 0 ? metallicRoughnessTextureIdx : m_defaultTextureIdx;
@@ -319,7 +316,7 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 
 		bindGroupEntries[4].binding = 4;
 		idx = metallicRoughnessSamplerIdx >= 0 ? metallicRoughnessSamplerIdx : m_defaultSamplerIdx;
-		bindGroupEntries[4].sampler = m_samplers[idx];
+		bindGroupEntries[4].sampler = *m_samplers[idx];
 
 		bindGroupEntries[5].binding = 5;
 		idx = normalTextureIdx >= 0 ? normalTextureIdx : m_defaultTextureIdx;
@@ -327,7 +324,7 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 
 		bindGroupEntries[6].binding = 6;
 		idx = normalSamplerIdx >= 0 ? normalSamplerIdx : m_defaultSamplerIdx;
-		bindGroupEntries[6].sampler = m_samplers[idx];
+		bindGroupEntries[6].sampler = *m_samplers[idx];
 
 		BindGroupDescriptor bindGroupDesc;
 		bindGroupDesc.label = material.name.c_str();
@@ -369,19 +366,19 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 		bindGroupEntries[1].textureView = *m_textureViews[m_defaultTextureIdx];
 
 		bindGroupEntries[2].binding = 2;
-		bindGroupEntries[2].sampler = m_samplers[m_defaultSamplerIdx];
+		bindGroupEntries[2].sampler = *m_samplers[m_defaultSamplerIdx];
 
 		bindGroupEntries[3].binding = 3;
 		bindGroupEntries[3].textureView = *m_textureViews[m_defaultTextureIdx];
 
 		bindGroupEntries[4].binding = 4;
-		bindGroupEntries[4].sampler = m_samplers[m_defaultSamplerIdx];
+		bindGroupEntries[4].sampler = *m_samplers[m_defaultSamplerIdx];
 
 		bindGroupEntries[5].binding = 5;
 		bindGroupEntries[5].textureView = *m_textureViews[m_defaultTextureIdx];
 
 		bindGroupEntries[6].binding = 6;
-		bindGroupEntries[6].sampler = m_samplers[m_defaultSamplerIdx];
+		bindGroupEntries[6].sampler = *m_samplers[m_defaultSamplerIdx];
 
 		BindGroupDescriptor bindGroupDesc;
 		bindGroupDesc.label = "Default Material";

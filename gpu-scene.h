@@ -94,7 +94,7 @@ private:
 	std::vector<SampledTexture> m_sampledTextures;
 
 	// Samplers
-	std::vector<wgpu::Sampler> m_samplers;
+	std::vector<wgpu::raii::Sampler> m_samplers;
 	uint32_t m_defaultSamplerIdx;
 
 	// Materials
