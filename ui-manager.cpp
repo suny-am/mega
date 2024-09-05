@@ -8,7 +8,6 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm/gtx/polar_coordinates.hpp>
 
-// Custom ImGui widgets
 namespace ImGui {
     bool DragDirection(const char* label, glm::vec4& direction) {
         glm::vec2 angles = glm::degrees(glm::polar(glm::vec3(direction)));
@@ -16,15 +15,13 @@ namespace ImGui {
         direction = glm::vec4(glm::euclidean(glm::radians(angles)), direction.w);
         return changed;
     }
-} // namespace ImGui
+}
 
 bool UiManager::init(GLFWwindow* window, wgpu::Device device, wgpu::TextureFormat surfaceFormat, wgpu::TextureFormat depthTextureFormat) {
-    // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::GetIO();
 
-    // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOther(window, true);
     ImGui_ImplWGPU_InitInfo initInfo;
 
@@ -60,11 +57,8 @@ void UiManager::update(wgpu::RenderPassEncoder renderPass,
         lightingUniFormsChanged = changed;
     }
 
-    // Draw the UI
     ImGui::EndFrame();
-    // Convert the UI defined above into low-level drawing commands
     ImGui::Render();
-    // Execute the low-level drawing commands on the WebGPU backend
     ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
 }
 
