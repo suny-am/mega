@@ -54,7 +54,6 @@ private:
 	// destroy() has just been called.
 
 	void initDevice(wgpu::Device device);
-	void terminateDevice();
 
 	void initBuffers(const tinygltf::Model& model);
 	void terminateBuffers();
@@ -77,7 +76,7 @@ private:
 private:
 	// Device
 	wgpu::raii::Device m_device;
-	wgpu::Queue m_queue = nullptr;
+	wgpu::raii::Queue m_queue;
 
 	// Buffers
 	std::vector<wgpu::Buffer> m_buffers;
