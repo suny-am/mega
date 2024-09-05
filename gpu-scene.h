@@ -84,7 +84,7 @@ private:
 
 	// Texture
 	std::vector<wgpu::Texture> m_textures;
-	std::vector<wgpu::TextureView> m_textureViews;
+	std::vector<wgpu::raii::TextureView> m_textureViews;
 	uint32_t m_defaultTextureIdx; // empty texture bound for materials that do not use a texture
 	// This is what GLTF calls a texture, as opposed to wgpu::Texture that corresponds to gltf::Image
 	struct SampledTexture {
