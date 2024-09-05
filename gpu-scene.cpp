@@ -77,19 +77,14 @@ void GpuScene::destroy() {
 // Private methods
 
 void GpuScene::initDevice(wgpu::Device device) {
-	m_device = device;
-	m_device.reference();
-	m_queue = m_device.getQueue();
+	m_device = std::move(device);
+	m_queue = m_device->getQueue();
 }
 
 void GpuScene::terminateDevice() {
 	if (m_queue) {
 		m_queue.release();
 		m_queue = nullptr;
-	}
-	if (m_device) {
-		m_device.release();
-		m_device = nullptr;
 	}
 }
 
@@ -99,7 +94,7 @@ void GpuScene::initBuffers(const tinygltf::Model& model) {
 		bufferDesc.label = buffer.name.c_str();
 		bufferDesc.size = alignToNextMultipleOf(static_cast<uint32_t>(buffer.data.size()), 4);
 		bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex | BufferUsage::Index;
-		wgpu::Buffer gpuBuffer = m_device.createBuffer(bufferDesc);
+		wgpu::Buffer gpuBuffer = m_device->createBuffer(bufferDesc);
 		m_buffers.push_back(gpuBuffer);
 		m_queue.writeBuffer(gpuBuffer, 0, buffer.data.data(), bufferDesc.size);
 	}
@@ -109,7 +104,7 @@ void GpuScene::initBuffers(const tinygltf::Model& model) {
 		bufferDesc.label = "Null Buffer";
 		bufferDesc.size = static_cast<uint32_t>(4 * sizeof(float));
 		bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex | BufferUsage::Index;
-		m_nullBuffer = m_device.createBuffer(bufferDesc);
+		m_nullBuffer = m_device->createBuffer(bufferDesc);
 	}
 }
 
@@ -140,7 +135,7 @@ void GpuScene::initTextures(const tinygltf::Model& model) {
 		desc.usage = TextureUsage::CopyDst | TextureUsage::TextureBinding;
 		desc.viewFormatCount = 0;
 		desc.viewFormats = nullptr;
-		wgpu::Texture gpuTexture = m_device.createTexture(desc);
+		wgpu::Texture gpuTexture = m_device->createTexture(desc);
 		m_textures.push_back(gpuTexture);
 
 		// View
@@ -184,7 +179,7 @@ void GpuScene::initTextures(const tinygltf::Model& model) {
 		desc.usage = TextureUsage::CopyDst | TextureUsage::TextureBinding;
 		desc.viewFormatCount = 0;
 		desc.viewFormats = nullptr;
-		wgpu::Texture gpuTexture = m_device.createTexture(desc);
+		wgpu::Texture gpuTexture = m_device->createTexture(desc);
 		m_textures.push_back(gpuTexture);
 
 		// View
@@ -249,12 +244,12 @@ void GpuScene::initSamplers(const tinygltf::Model& model) {
 		desc.lodMinClamp = 0.0;
 		desc.lodMaxClamp = 1.0;
 		desc.maxAnisotropy = 1.0;
-		m_samplers.push_back(m_device.createSampler(desc));
+		m_samplers.push_back(m_device->createSampler(desc));
 	}
 
 	m_defaultSamplerIdx = static_cast<uint32_t>(m_samplers.size());
 	desc.label = "Default";
-	m_samplers.push_back(m_device.createSampler(desc));
+	m_samplers.push_back(m_device->createSampler(desc));
 }
 
 void GpuScene::terminateSamplers() {
@@ -298,7 +293,7 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 		bufferDesc.mappedAtCreation = false;
 		bufferDesc.usage = BufferUsage::Uniform | BufferUsage::CopyDst;
 		bufferDesc.size = sizeof(MaterialUniforms);
-		gpuMaterial.uniformBuffer = m_device.createBuffer(bufferDesc);
+		gpuMaterial.uniformBuffer = m_device->createBuffer(bufferDesc);
 
 		// Uniform Values
 		gpuMaterial.uniforms.baseColorFactor = glm::make_vec4(material.pbrMetallicRoughness.baseColorFactor.data());
@@ -353,7 +348,7 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 		bindGroupDesc.entryCount = static_cast<uint32_t>(bindGroupEntries.size());
 		bindGroupDesc.entries = bindGroupEntries.data();
 		bindGroupDesc.layout = bindGroupLayout;
-		gpuMaterial.bindGroup = m_device.createBindGroup(bindGroupDesc);
+		gpuMaterial.bindGroup = m_device->createBindGroup(bindGroupDesc);
 
 		m_materials.push_back(gpuMaterial);
 	}
@@ -369,7 +364,7 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 		bufferDesc.mappedAtCreation = false;
 		bufferDesc.usage = BufferUsage::Uniform | BufferUsage::CopyDst;
 		bufferDesc.size = sizeof(MaterialUniforms);
-		gpuMaterial.uniformBuffer = m_device.createBuffer(bufferDesc);
+		gpuMaterial.uniformBuffer = m_device->createBuffer(bufferDesc);
 
 		// Uniform Values
 		gpuMaterial.uniforms.baseColorFactor = {1.0, 0.5, 0.5, 1.0};
@@ -407,7 +402,7 @@ void GpuScene::initMaterials(const tinygltf::Model& model, BindGroupLayout bindG
 		bindGroupDesc.entryCount = static_cast<uint32_t>(bindGroupEntries.size());
 		bindGroupDesc.entries = bindGroupEntries.data();
 		bindGroupDesc.layout = bindGroupLayout;
-		gpuMaterial.bindGroup = m_device.createBindGroup(bindGroupDesc);
+		gpuMaterial.bindGroup = m_device->createBindGroup(bindGroupDesc);
 
 		m_materials.push_back(gpuMaterial);
 	}
@@ -441,7 +436,7 @@ void GpuScene::initNodes(const tinygltf::Model& model, BindGroupLayout bindGroup
 				bufferDesc.mappedAtCreation = false;
 				bufferDesc.usage = BufferUsage::Uniform | BufferUsage::CopyDst;
 				bufferDesc.size = sizeof(NodeUniforms);
-				gpuNode.uniformBuffer = m_device.createBuffer(bufferDesc);
+				gpuNode.uniformBuffer = m_device->createBuffer(bufferDesc);
 
 				// Uniform Values
 				gpuNode.uniforms.modelMatrix = globalTransform;
@@ -458,7 +453,7 @@ void GpuScene::initNodes(const tinygltf::Model& model, BindGroupLayout bindGroup
 				bindGroupDesc.entryCount = static_cast<uint32_t>(bindGroupEntries.size());
 				bindGroupDesc.entries = bindGroupEntries.data();
 				bindGroupDesc.layout = bindGroupLayout;
-				gpuNode.bindGroup = m_device.createBindGroup(bindGroupDesc);
+				gpuNode.bindGroup = m_device->createBindGroup(bindGroupDesc);
 
 				m_nodes.push_back(gpuNode);
 			}

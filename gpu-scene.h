@@ -3,6 +3,7 @@
 #include "resource-loaders/tiny_gltf.h"
 
 #include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 #include <glm/glm/glm.hpp>
 
 #include <vector>
@@ -75,7 +76,7 @@ private:
 
 private:
 	// Device
-	wgpu::Device m_device = nullptr;
+	wgpu::raii::Device m_device;
 	wgpu::Queue m_queue = nullptr;
 
 	// Buffers
