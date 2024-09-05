@@ -57,8 +57,11 @@ void UiManager::update(wgpu::RenderPassEncoder renderPass,
         lightingUniFormsChanged = changed;
     }
 
+    // Draw the UI
     ImGui::EndFrame();
+    // Convert the UI defined above into low-level drawing commands
     ImGui::Render();
+    // Execute the low-level drawing commands on the WebGPU backend
     ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
 }
 

@@ -26,10 +26,6 @@
 using namespace wgpu;
 using VertexAttributes = ResourceManager::VertexAttributes;
 
-using std::cout;
-using std::endl;
-using std::cerr;
-
 constexpr float PI = 3.14159265358979323846f;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -72,7 +68,7 @@ void Application::onFrame() {
 
 	TextureView nextTexture = getNextSurfaceTextureView();
 	if (!nextTexture) {
-		cerr << "Could not acquire next texture from surface configuration" << endl;
+		std::cerr << "Could not acquire next texture from surface configuration" << std::endl;
 		return;
 	}
 
@@ -181,12 +177,12 @@ void Application::onScroll(double xOffset, double yOffset) {
 bool Application::initWindowAndDevice() {
 	m_instance = createInstance(InstanceDescriptor{});
 	if (!m_instance) {
-		cerr << "Could not initialize WebGPU!" << endl;
+		std::cerr << "Could not initialize WebGPU!" << std::endl;
 		return false;
 	}
 
 	if (!glfwInit()) {
-		cerr << "Could not initialize GLFW!" << endl;
+		std::cerr << "Could not initialize GLFW!" << std::endl;
 		return false;
 	}
 
@@ -194,21 +190,21 @@ bool Application::initWindowAndDevice() {
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 	m_window = glfwCreateWindow(640, 480, "Learn WebGPU", NULL, NULL);
 	if (!m_window) {
-		cerr << "Could not open window!" << endl;
+		std::cerr << "Could not open window!" << std::endl;
 		return false;
 	}
 
-	cout << "Requesting adapter..." << endl;
+	std::cout << "Requesting adapter..." << std::endl;
 	m_surface = glfwGetWGPUSurface(m_instance, m_window);
 	RequestAdapterOptions adapterOpts{};
 	adapterOpts.compatibleSurface = m_surface;
 	Adapter adapter = m_instance.requestAdapter(adapterOpts);
-	cout << "Got adapter: " << adapter << endl;
+	std::cout << "Got adapter: " << adapter << std::endl;
 
 	SupportedLimits supportedLimits;
 	adapter.getLimits(&supportedLimits);
 
-	cout << "Requesting device..." << endl;
+	std::cout << "Requesting device..." << std::endl;
 	RequiredLimits requiredLimits = Default;
 	requiredLimits.limits.maxVertexAttributes = 4;
 	requiredLimits.limits.maxVertexBuffers = 4;
@@ -233,13 +229,13 @@ bool Application::initWindowAndDevice() {
 	deviceDesc.requiredLimits = &requiredLimits;
 	deviceDesc.defaultQueue.label = "Default Device";
 	m_device = adapter.requestDevice(deviceDesc);
-	cout << "Got device: " << m_device << endl;
+	std::cout << "Got device: " << m_device << std::endl;
 
 	// Add an error callback for more debug info
 	m_errorCallbackHandle = m_device.setUncapturedErrorCallback([](ErrorType type, char const* message) {
-		cout << "Device error: type " << type;
-		if (message) cout << " (message: " << message << ")";
-		cout << endl;
+		std::cout << "Device error: type " << type;
+		if (message)  std::cout << " (message: " << message << ")";
+		std::cout << std::endl;
 																});
 
 	m_queue = m_device.getQueue();
@@ -346,14 +342,14 @@ void Application::terminateDepthBuffer() {
 }
 
 bool Application::initRenderPipelines() {
-	cout << "Creating shader module..." << endl;
+	std::cout << "Creating shader module..." << std::endl;
 	m_shaderModule = ResourceManager::loadShaderModule(RESOURCE_DIR "/shaders/shader.wgsl", m_device);
 	if (!m_shaderModule) {
-		cerr << "Could not load shader from path!" << endl;
+		std::cerr << "Could not load shader from path!" << std::endl;
 	}
-	cout << "Shader module: " << m_shaderModule << endl;
+	std::cout << "Shader module: " << m_shaderModule << std::endl;
 
-	cout << "Creating render pipeline..." << endl;
+	std::cout << "Creating render pipeline..." << std::endl;
 	RenderPipelineDescriptor pipelineDesc;
 
 	pipelineDesc.vertex.module = m_shaderModule;
@@ -422,7 +418,7 @@ bool Application::initRenderPipelines() {
 		pipelineDesc.primitive.topology = m_gpuScene.primitiveTopology(pipelineIdx);
 
 		RenderPipeline pipeline = m_device.createRenderPipeline(pipelineDesc);
-		cout << "Render pipeline: " << pipeline << endl;
+		std::cout << "Render pipeline: " << pipeline << std::endl;
 		if (pipeline == nullptr) return false;
 		m_pipelines.push_back(pipeline);
 	}
@@ -444,7 +440,7 @@ bool Application::initGeometry() {
 	bool success = ResourceManager::loadGeometryFromGltf(RESOURCE_DIR "/scenes/DamagedHelmet.glb", m_cpuScene);
 	//bool success = ResourceManager::loadGeometryFromGltf(RESOURCE_DIR "/scenes/triangle.gltf", m_cpuScene);
 	if (!success) {
-		cerr << "Could not load geometry!" << endl;
+		std::cerr << "Could not load geometry!" << std::endl;
 		return false;
 	}
 	m_gpuScene.createFromModel(m_device, m_cpuScene, m_materialBindGroupLayout, m_nodeBindGroupLayout);

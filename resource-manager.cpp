@@ -16,12 +16,6 @@
 #include <fstream>
 #include <nfd.h>
 
-using std::cout;
-using std::cerr;
-using std::endl;
-using std::vector;
-using std::string;
-
 using namespace wgpu;
 
 static void writeMipMaps(
@@ -39,7 +33,7 @@ ShaderModule ResourceManager::loadShaderModule(const path& path, Device device) 
     }
     file.seekg(0, std::ios::end);
     size_t size = file.tellg();
-    string shaderSource(size, ' ');
+    std::string shaderSource(size, ' ');
     file.seekg(0);
     file.read(shaderSource.data(), size);
 
@@ -56,20 +50,20 @@ ShaderModule ResourceManager::loadShaderModule(const path& path, Device device) 
 
 bool ResourceManager::loadGeometryFromObj(const path& path, std::vector<VertexAttributes>& vertexData) {
     tinyobj::attrib_t attrib;
-    vector<tinyobj::shape_t> shapes;
-    vector<tinyobj::material_t> materials;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
 
-    string warn;
-    string err;
+    std::string warn;
+    std::string err;
 
     bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, path.string().c_str());
 
     if (!warn.empty()) {
-        cout << warn << endl;
+        std::cout << warn << std::endl;
     }
 
     if (!err.empty()) {
-        cout << err << endl;
+        std::cout << err << std::endl;
     }
 
     if (!ret) {
@@ -149,29 +143,29 @@ Texture ResourceManager::loadTexture(const path& path, Device device, TextureVie
 }
 
 bool ResourceManager::loadGeometryFromGltf(const path& path, tinygltf::Model& model) {
-	using namespace tinygltf;
+    using namespace tinygltf;
 
-	TinyGLTF loader;
-	std::string err;
-	std::string warn;
+    TinyGLTF loader;
+    std::string err;
+    std::string warn;
 
-	bool success = false;
-	if (path.extension() == ".glb") {
-		success = loader.LoadBinaryFromFile(&model, &err, &warn, path.string());
-	}
-	else {
-		success = loader.LoadASCIIFromFile(&model, &err, &warn, path.string());
-	}
+    bool success = false;
+    if (path.extension() == ".glb") {
+        success = loader.LoadBinaryFromFile(&model, &err, &warn, path.string());
+    }
+    else {
+        success = loader.LoadASCIIFromFile(&model, &err, &warn, path.string());
+    }
 
-	if (!warn.empty()) {
-		std::cout << "Warning: " << warn << std::endl;
-	}
+    if (!warn.empty()) {
+        std::cout << "Warning: " << warn << std::endl;
+    }
 
-	if (!err.empty()) {
-		std::cerr << "Error: " << err << std::endl;
-	}
+    if (!err.empty()) {
+        std::cerr << "Error: " << err << std::endl;
+    }
 
-	return success;
+    return success;
 }
 
 ResourceManager::path ResourceManager::loadGeometryFromFile() {
