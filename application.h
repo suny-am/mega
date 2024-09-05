@@ -4,12 +4,15 @@
 #include "resource-loaders/tiny_gltf.h"
 
 #include <webgpu/webgpu.hpp>
+#include <webgpu/webgpu-raii.hpp>
 #include <glm/glm/glm.hpp>
 
 #include <array>
 
 // Forward declare
 struct GLFWwindow;
+
+using namespace wgpu;
 
 class Application {
 public:
@@ -56,15 +59,13 @@ private:
 	void updateLightingUniforms();
 
 	bool initBindGroupLayouts();
-	void terminateBindGroupLayouts();
 
 	bool initBindGroup();
-	void terminateBindGroup();
 
 	void updateProjectionMatrix();
 	void updateViewMatrix();
 
-	wgpu::TextureView getNextSurfaceTextureView();
+	TextureView getNextSurfaceTextureView();
 
 public:
 	using mat4x4 = glm::mat4x4;
@@ -124,42 +125,42 @@ public:
 private:
 	// Window and Device
 	GLFWwindow* m_window = nullptr;
-	wgpu::Instance m_instance = nullptr;
-	wgpu::Surface m_surface = nullptr;
-	wgpu::Device m_device = nullptr;
-	wgpu::Queue m_queue = nullptr;
-	wgpu::TextureFormat m_surfaceFormat = wgpu::TextureFormat::Undefined;
+	raii::Instance m_instance;
+	raii::Surface m_surface;
+	raii::Device m_device;
+	raii::Queue m_queue;
+	TextureFormat m_surfaceFormat = TextureFormat::Undefined;
 	// Keep the error callback alive
-	std::unique_ptr<wgpu::ErrorCallback> m_errorCallbackHandle;
+	std::unique_ptr<ErrorCallback> m_errorCallbackHandle;
 
 	// Depth Buffer
-	wgpu::TextureFormat m_depthTextureFormat = wgpu::TextureFormat::Depth24Plus;
-	wgpu::Texture m_depthTexture = nullptr;
-	wgpu::TextureView m_depthTextureView = nullptr;
+	TextureFormat m_depthTextureFormat = TextureFormat::Depth24Plus;
+	raii::Texture m_depthTexture;
+	raii::TextureView m_depthTextureView;
 
 	// Render Pipeline
-	wgpu::ShaderModule m_shaderModule = nullptr;
-	std::vector<wgpu::RenderPipeline> m_pipelines;
+	raii::ShaderModule m_shaderModule;
+	std::vector<RenderPipeline> m_pipelines;
 
 	// Texture
-	wgpu::Sampler m_sampler = nullptr;
-	wgpu::Texture m_texture = nullptr;
-	wgpu::TextureView m_textureView = nullptr;
+	raii::Sampler m_sampler;
+	raii::Texture m_texture;
+	raii::TextureView m_textureView;
 
 	// Geometry
 	tinygltf::Model m_cpuScene;
 	GpuScene m_gpuScene;
 
 	// Uniforms
-	wgpu::Buffer m_uniformBuffer = nullptr;
-	wgpu::Buffer m_lightingUniformBuffer = nullptr;
+	raii::Buffer m_uniformBuffer;
+	raii::Buffer m_lightingUniformBuffer;
 	bool m_lightingUniformsChanged = true;
 
 	// Bind Group Layout
-	wgpu::BindGroupLayout m_bindGroupLayout = nullptr;
-	wgpu::BindGroupLayout m_materialBindGroupLayout = nullptr;
-	wgpu::BindGroupLayout m_nodeBindGroupLayout = nullptr;
+	raii::BindGroupLayout m_bindGroupLayout;
+	raii::BindGroupLayout m_materialBindGroupLayout;
+	raii::BindGroupLayout m_nodeBindGroupLayout;
 
 	// Bind Group
-	wgpu::BindGroup m_bindGroup = nullptr;
+	raii::BindGroup m_bindGroup;
 };
