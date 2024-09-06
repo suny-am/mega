@@ -10,7 +10,7 @@
 #include "resource-loaders/tiny_gltf.h"
 #include "resource-loaders/stb_image.h"
 
-#include "webgpu-std-utils.hpp"
+#include "webgpu-utils/webgpu-std-utils.hpp"
 
 #include <filesystem>
 #include <fstream>

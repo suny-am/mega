@@ -4,7 +4,7 @@
 #include "ui-manager.h"
 #include "resource-manager.h"
 
-#include "webgpu-std-utils.hpp"
+#include "webgpu-utils/webgpu-std-utils.hpp"
 
 #include <glfw3webgpu.h>
 #include <GLFW/glfw3.h>
