@@ -1,8 +1,8 @@
 
 #include "application.h"
 #include "controls.h"
-#include "ui-manager.h"
 #include "resource-manager.h"
+#include "ui-manager.h"
 
 #include "webgpu-utils/webgpu-std-utils.hpp"
 
@@ -28,15 +28,17 @@ using VertexAttributes = ResourceManager::VertexAttributes;
 
 constexpr float PI = 3.14159265358979323846f;
 
-///////////////////////////////////////////////////////////////////////////////
-// Public methods
+/**
+ * Public methods
+ */
 
 bool Application::onInit() {
 	if (!initWindowAndDevice()) return false;
 	if (!initSurfaceConfiguration()) return false;
 	if (!initDepthBuffer()) return false;
 	if (!initBindGroupLayouts()) return false;
-	if (!initGeometry()) return false;
+	m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/DamagedHelmet.glb";
+	if (!initGeometry(m_filePath)) return false;
 	if (!initRenderPipelines()) return false;
 	if (!initUniforms()) return false;
 	if (!initLightingUniforms()) return false;
@@ -59,6 +61,13 @@ void Application::onFrame() {
 	glfwPollEvents();
 	Controls::updateDragInertia(*&m_drag, *&m_cameraState);
 	updateLightingUniforms();
+
+	if (m_filePathHasChanged) {
+		bool success = initGeometry(m_filePath);
+		if (success) {
+			m_filePathHasChanged = false;
+		}
+	}
 
 	// Update uniform buffer
 	m_uniforms.time = static_cast<float>(glfwGetTime());
@@ -114,7 +123,7 @@ void Application::onFrame() {
 	}
 
 	// We add the GUI drawing commands to the render pass
-	UiManager::update(renderPass, m_uniforms, m_lightingUniforms, m_lightingUniformsChanged);
+	UiManager::update(renderPass, m_uniforms, m_lightingUniforms, m_lightingUniformsChanged, m_filePath, m_filePathHasChanged);
 
 	renderPass.end();
 	renderPass.release();
@@ -169,8 +178,9 @@ void Application::onScroll(double xOffset, double yOffset) {
 	updateViewMatrix();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Private methods
+/**
+ * Private methods
+ */
 
 bool Application::initWindowAndDevice() {
 	m_instance = createInstance(InstanceDescriptor{});
@@ -401,17 +411,19 @@ bool Application::initRenderPipelines() {
 	PipelineLayout layout = m_device->createPipelineLayout(layoutDesc);
 	pipelineDesc.layout = layout;
 
-	for (uint32_t pipelineIdx = 0; pipelineIdx < m_gpuScene.renderPipelineCount(); ++pipelineIdx) {
-		// Vertex fetch
-		std::vector<VertexBufferLayout> vertexBufferLayouts = m_gpuScene.vertexBufferLayouts(pipelineIdx);
-		pipelineDesc.vertex.bufferCount = static_cast<uint32_t>(vertexBufferLayouts.size());
-		pipelineDesc.vertex.buffers = vertexBufferLayouts.data();
-		pipelineDesc.primitive.topology = m_gpuScene.primitiveTopology(pipelineIdx);
 
-		RenderPipeline pipeline = m_device->createRenderPipeline(pipelineDesc);
-		std::cout << "Render pipeline: " << pipeline << std::endl;
-		if (pipeline == nullptr) return false;
-		m_pipelines.push_back(pipeline);
+	if (m_vertexData.empty()) {
+		for (uint32_t pipelineIdx = 0; pipelineIdx < m_gpuScene.renderPipelineCount(); ++pipelineIdx) {
+			std::vector<VertexBufferLayout> vertexBufferLayouts = m_gpuScene.vertexBufferLayouts(pipelineIdx);
+			pipelineDesc.vertex.bufferCount = static_cast<uint32_t>(vertexBufferLayouts.size());
+			pipelineDesc.vertex.buffers = vertexBufferLayouts.data();
+			pipelineDesc.primitive.topology = m_gpuScene.primitiveTopology(pipelineIdx);
+
+			RenderPipeline pipeline = m_device->createRenderPipeline(pipelineDesc);
+			std::cout << "Render pipeline: " << pipeline << std::endl;
+			if (pipeline == nullptr) return false;
+			m_pipelines.push_back(pipeline);
+		}
 	}
 
 	return true;
@@ -421,18 +433,24 @@ void Application::terminateRenderPipelines() {
 	m_pipelines.clear();
 }
 
-bool Application::initGeometry() {
-	// Load mesh data from OBJ file
-	// bool success = ResourceManager::loadGeometryFromGltf(RESOURCE_DIR "/scenes/BusterDrone.glb", m_cpuScene);
-	bool success = ResourceManager::loadGeometryFromGltf(RESOURCE_DIR "/scenes/DamagedHelmet.glb", m_cpuScene);
-	//bool success = ResourceManager::loadGeometryFromGltf(RESOURCE_DIR "/scenes/triangle.gltf", m_cpuScene);
+bool Application::initGeometry(const ResourceManager::path& filePath) {
+	auto extension = filePath.extension();
+	bool success = false;
+	
+	std::cout << "Loading file from path: " << filePath << std::endl;
+	
+	if (extension == ".glb" || extension == ".gltf") {
+		success = ResourceManager::loadGeometryFromGltf(filePath, m_cpuScene);
+		m_gpuScene.createFromModel(*m_device, m_cpuScene, *m_materialBindGroupLayout, *m_nodeBindGroupLayout);
+	}
+	else if (extension == ".obj") {
+		success = ResourceManager::loadGeometryFromObj(filePath, m_vertexData);
+	}
+
 	if (!success) {
 		std::cerr << "Could not load geometry!" << std::endl;
-		return false;
 	}
-	m_gpuScene.createFromModel(*m_device, m_cpuScene, *m_materialBindGroupLayout, *m_nodeBindGroupLayout);
-
-	return true;
+	return success;
 }
 
 void Application::terminateGeometry() {

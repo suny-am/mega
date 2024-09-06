@@ -168,13 +168,15 @@ bool ResourceManager::loadGeometryFromGltf(const path& path, tinygltf::Model& mo
     return success;
 }
 
-ResourceManager::path ResourceManager::loadGeometryFromFile() {
+ResourceManager::path ResourceManager::openFileDialog() {
     NFD_Init();
 
     nfdu8char_t* outPath;
-    nfdu8filteritem_t filters[1] = { { "Model file", "obj" } };
+    // nfdu8filteritem_t filters[2] = { { "Model", "obj" }, { "Scene", "glb, gltf" } };
+    nfdu8filteritem_t filters[1] = { { "Scene", "glb, gltf" } };
     nfdopendialogu8args_t args = { };
     args.filterList = filters;
+    // args.filterCount = 2;
     args.filterCount = 1;
     nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
     path modelPath;
