@@ -59,22 +59,14 @@ add_subdirectory(imgui)
 
 add_executable(App  
   main.cpp
-  application.h
   application.cpp
-  controls.h
   controls.cpp
-  ui-manager.h
   ui-manager.cpp
-  gltf-debug-renderer.h
   gltf-debug-renderer.cpp
-  gpu-scene.h
   gpu-scene.cpp
-  resource-manager.h
   resource-manager.cpp
   implementations.cpp
-  webgpu-std-utils.hpp
-  webgpu-gltf-utils.h
-  webgpu-gltf-utils.cpp
+  webgpu-utils/webgpu-gltf-utils.cpp
 )
 
 if(DEV_MODE)
