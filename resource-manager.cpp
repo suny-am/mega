@@ -14,7 +14,6 @@
 
 #include <filesystem>
 #include <fstream>
-#include <nfd.h>
 
 using namespace wgpu;
 
@@ -172,13 +171,10 @@ ResourceManager::path ResourceManager::openFileDialog() {
     NFD_Init();
 
     nfdu8char_t* outPath;
-    // nfdu8filteritem_t filters[2] = { { "Model", "obj" }, { "Scene", "glb, gltf" } };
-    nfdu8filteritem_t filters[1] = { { "Scene", "glb, gltf" } };
-    nfdopendialogu8args_t args = { };
-    args.filterList = filters;
-    // args.filterCount = 2;
-    args.filterCount = 1;
-    nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args);
+
+    FileDialogArgs args = {};
+    loadDialogArgs(args);
+    nfdresult_t result = NFD_OpenDialogU8_With(&outPath, &args.args);
     path modelPath;
     if (result == NFD_OKAY)
     {
@@ -234,6 +230,12 @@ glm::mat3x3 ResourceManager::computeTBN(const VertexAttributes corners[3], const
     B = cross(N, T);
 
     return mat3x3(T, B, N);
+}
+
+void ResourceManager::loadDialogArgs(FileDialogArgs& args) {
+    args.filters[0] = { "Scenes", "glb, gltf" };
+    args.args.filterList = args.filters;
+    args.args.filterCount = args.filterCount;
 }
 
 static void writeMipMaps(

@@ -194,9 +194,13 @@ bool Application::initWindowAndDevice() {
 		return false;
 	}
 
+	auto monitor = glfwGetPrimaryMonitor();
+	int monWidth, monHeight;
+	glfwGetMonitorWorkarea(monitor, nullptr, nullptr, &monWidth, &monHeight);
+
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 	glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-	m_window = glfwCreateWindow(640, 480, "Learn WebGPU", NULL, NULL);
+	m_window = glfwCreateWindow(monWidth, monHeight, "Mega Render Engine", NULL, NULL);
 	if (!m_window) {
 		std::cerr << "Could not open window!" << std::endl;
 		return false;
@@ -224,9 +228,20 @@ bool Application::initWindowAndDevice() {
 	requiredLimits.limits.maxBindGroups = 3;
 	requiredLimits.limits.maxUniformBuffersPerShaderStage = 2;
 	requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
-	// Allow textures up to 2K
-	requiredLimits.limits.maxTextureDimension1D = 2048;
-	requiredLimits.limits.maxTextureDimension2D = 2048;
+
+	int maxTextureDimensions = 2048;
+	int monCount;
+	auto monitors = glfwGetMonitors(&monCount);
+	for (int monIdx = 0; monIdx < monCount; ++monIdx) {
+		int monWidth;
+		glfwGetMonitorWorkarea(monitors[monIdx], nullptr, nullptr, &monWidth, nullptr);
+		if (maxTextureDimensions < monWidth) {
+			maxTextureDimensions = monWidth;
+		}
+	}
+
+	requiredLimits.limits.maxTextureDimension1D = maxTextureDimensions;
+	requiredLimits.limits.maxTextureDimension2D = maxTextureDimensions;
 	requiredLimits.limits.maxTextureArrayLayers = 1;
 	requiredLimits.limits.maxSampledTexturesPerShaderStage = 3;
 	requiredLimits.limits.maxSamplersPerShaderStage = 3;
@@ -436,9 +451,9 @@ void Application::terminateRenderPipelines() {
 bool Application::initGeometry(const ResourceManager::path& filePath) {
 	auto extension = filePath.extension();
 	bool success = false;
-	
+
 	std::cout << "Loading file from path: " << filePath << std::endl;
-	
+
 	if (extension == ".glb" || extension == ".gltf") {
 		success = ResourceManager::loadGeometryFromGltf(filePath, m_cpuScene);
 		m_gpuScene.createFromModel(*m_device, m_cpuScene, *m_materialBindGroupLayout, *m_nodeBindGroupLayout);

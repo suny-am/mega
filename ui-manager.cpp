@@ -105,7 +105,7 @@ void UiManager::fileMenu(ResourceManager::path& filePath, bool& filePathHasChang
         {
             if (ImGui::MenuItem("Open", "Ctrl+O")) {
                 auto newPath = ResourceManager::openFileDialog();
-                if (newPath != filePath) {
+                if (newPath != filePath && newPath != "") {
                     filePath = newPath;
                     filePathHasChanged = true;
                 }

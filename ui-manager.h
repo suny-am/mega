@@ -1,6 +1,11 @@
-#include <GLFW/glfw3.h>
-#include <webgpu/webgpu.hpp>
+#pragma once
+
 #include "application.h"
+
+#include <GLFW/glfw3.h>
+
+#include <webgpu/webgpu.hpp>
+
 #include <imgui/imgui.h>
 
 class UiManager {
