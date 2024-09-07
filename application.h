@@ -1,6 +1,8 @@
 #pragma once
 
 #include "gpu-scene.h"
+#include "resource-manager.h"
+
 #include "resource-loaders/tiny_gltf.h"
 
 #include <webgpu/webgpu.hpp>
@@ -11,6 +13,8 @@
 
 // Forward declare
 struct GLFWwindow;
+
+using VertexAttributes = ResourceManager::VertexAttributes;
 
 using namespace wgpu;
 
@@ -48,7 +52,7 @@ private:
 	bool initRenderPipelines();
 	void terminateRenderPipelines();
 
-	bool initGeometry();
+	bool initGeometry(const ResourceManager::path& filePath);
 	void terminateGeometry();
 
 	bool initUniforms();
@@ -123,44 +127,40 @@ public:
 	DragState m_drag;
 
 private:
-	// Window and Device
 	GLFWwindow* m_window = nullptr;
 	raii::Instance m_instance;
 	raii::Surface m_surface;
 	raii::Device m_device;
 	raii::Queue m_queue;
 	TextureFormat m_surfaceFormat = TextureFormat::Undefined;
-	// Keep the error callback alive
 	std::unique_ptr<ErrorCallback> m_errorCallbackHandle;
 
-	// Depth Buffer
 	TextureFormat m_depthTextureFormat = TextureFormat::Depth24Plus;
 	raii::Texture m_depthTexture;
 	raii::TextureView m_depthTextureView;
 
-	// Render Pipeline
 	raii::ShaderModule m_shaderModule;
 	std::vector<RenderPipeline> m_pipelines;
 
-	// Texture
 	raii::Sampler m_sampler;
 	raii::Texture m_texture;
 	raii::TextureView m_textureView;
 
-	// Geometry
 	tinygltf::Model m_cpuScene;
 	GpuScene m_gpuScene;
 
-	// Uniforms
+	std::vector<VertexAttributes> m_vertexData;
+
 	raii::Buffer m_uniformBuffer;
 	raii::Buffer m_lightingUniformBuffer;
 	bool m_lightingUniformsChanged = true;
 
-	// Bind Group Layout
 	raii::BindGroupLayout m_bindGroupLayout;
 	raii::BindGroupLayout m_materialBindGroupLayout;
 	raii::BindGroupLayout m_nodeBindGroupLayout;
 
-	// Bind Group
 	raii::BindGroup m_bindGroup;
+
+	ResourceManager::path m_filePath;
+	bool m_filePathHasChanged;
 };

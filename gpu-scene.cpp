@@ -1,6 +1,6 @@
 #include "gpu-scene.h"
-#include "webgpu-std-utils.hpp"
-#include "webgpu-gltf-utils.h"
+#include "webgpu-utils/webgpu-std-utils.hpp"
+#include "webgpu-utils/webgpu-gltf-utils.h"
 
 #include "resource-loaders/tiny_gltf.h"
 
@@ -12,7 +12,7 @@
 
 using namespace wgpu;
 using namespace tinygltf;
-using namespace wgpu::gltf; // conversion utils
+using namespace wgpu::gltf;
 
 ///////////////////////////////////////////////////////////////////////////////
 // Public methods

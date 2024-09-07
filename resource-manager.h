@@ -1,7 +1,11 @@
 #pragma once
 #include <webgpu/webgpu.hpp>
+
+#include <nfd.h>
+
 #include <glm/glm/glm.hpp>
 #include <glm/glm/ext.hpp>
+
 #include <filesystem>
 
 using namespace wgpu;
@@ -31,9 +35,18 @@ public:
 
     static Texture loadTexture(const path& path, Device device, TextureView* pTextureView = nullptr);
 
-    static path loadGeometryFromFile();
+    static path openFileDialog();
+
+private:
+    struct FileDialogArgs {
+        nfdopendialogu8args_t args;
+        nfdu8filteritem_t filters[1];
+        int filterCount = 1;
+    };
 
 private:
     static mat3x3 computeTBN(const VertexAttributes corners[3], const vec3& expectedN);
     static void populateTextureFrameAttributes(std::vector<VertexAttributes>& vertexData);
+    static void loadDialogArgs(FileDialogArgs& args);
+
 };

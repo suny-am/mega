@@ -15,14 +15,11 @@
     <img src=".docs/images/logo.png" alt="Logo" width="80" height="80">
   </a>
 
-<h3 align="center">mega</h3>
-
+<h3 align="center">Mega Render Engine</h3>
   <p align="center">
-    Mega (render engine)
-    <br />
-    <!-- <a href="https://github.com/suny-am/mega"><strong>Explore the docs »</strong></a> -->
-    <br />
-    <!-- <a href="https://github.com/suny-am/mega">View Demo</a>
+    <!-- <a href="https://github.com/suny-am/mega"><strong>Explore the docs »</strong></a>
+    ·
+    <a href="https://github.com/suny-am/mega">View Demo</a>
     · -->
     <a href="https://github.com/suny-am/mega/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
     ·
@@ -71,6 +68,8 @@ Mega is a WebGPU based (targeting DAWN/WGPU and the web via Emscripten) render e
 
 [![CPlusPlus][CPlusPlus]][CPlusPlus-url]
 [![CMake][Cmake]][CMake-url]
+[![WebGPU][WebGPU]][WebGPU-url]
+[![glTF][glTF]][glTF-url]
 
 <p align="right"><a href="#readme-top">🔝</a></p>
 
@@ -144,32 +143,32 @@ Contributions are what make the open source community such an amazing place to l
 If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag "enhancement".
 Don't forget to give the project a star! Thanks again!
 
-#### 1. Fork the Project
+### 1. Fork the Project
 
 ```sh
 gh repo fork suny-am/mega --clone
 cd mega
 ```
 
-#### 2. Create your Feature Branch
+### 2. Create your Feature Branch
 
 ```sh
 git checkout -b feature/aNewCoolFeature
 ```
 
-#### 3. Commit your Changes
+### 3. Commit your Changes
 
 ```sh
 `git commit -m 'Add a new cool feature'
 ```
 
-#### 4. Push to the Branch
+### 4. Push to the Branch
 
 ```sh
 git push origin feature/aNewCoolFeature
 ```
 
-#### 5. Open a Pull Request
+### 5. Open a Pull Request
 
 ```sh
 gh pr create 
@@ -216,6 +215,10 @@ TBD
 
 ## Resources
 
+### Assets
+
+- [Khronos Group glTF sample assets](https://github.com/KhronosGroup/glTF-Sample-Assets)
+
 ### textures
 
 - [cobblestone_floor_08_diff_2k.jpg](https://eliemichel.github.io/LearnWebGPU/_downloads/c69c56204b32f85418889a40235cf7f5/cobblestone_floor_08_diff_2k.jpg)
@@ -245,29 +248,6 @@ Project Link: [https://github.com/suny-am/mega](https://github.com/suny-am/mega)
 
 <p align="right"><a href="#readme-top">🔝</a></p>
 
-<!----
-*Completely remove this section when you use this template*
-This section only contains what we use to gather information and all assets that used to create this template ( or you can use if you have to put references into your project)
---->
-
-<!--- Uncomment if needed
-## References 📚
-
-Here are some resources that were helpful in creating this project:
-
-- [GitHub Markdown Guide](https://guides.github.com/features/mastering-markdown/)
-- [Markdown Cheatsheet](https://www.markdownguide.org/cheat-sheet/)
-- [Emoji Cheat Sheet](https://www.webfx.com/tools/emoji-cheat-sheet/)
-- [ASCII Art Archive](https://www.asciiart.eu/)
-- [Awesome Badges](https://github.com/Envoy-VC/awesome-badge)
-- [Complete list of markdown emoji markup](https://gist.github.com/rxaviers/7360908)
-- [favourite website and app logos ](https://github.com/edent/SuperTinyIcons)
-- [Online markdown preview ](https://stackedit.io/app)
-- [Shield.io Badges](https://shields.io/)
-- [Find Some cool Arts](https://neocities.org/browse)
-
---->
-
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 [contributors-shield]: https://img.shields.io/github/contributors/suny-am/mega.svg?style=for-the-badge
@@ -286,3 +266,7 @@ Here are some resources that were helpful in creating this project:
 [CPlusPlus-url]: https://cplusplus.com
 [CMake]: https://img.shields.io/badge/cmake-064F8C?style=for-the-badge&logo=cmake
 [CMake-url]: https://cmake.org
+[WebGPU]: https://img.shields.io/badge/webgpu-%23005A9C?style=for-the-badge&logo=webgpu
+[WebGPU-url]: https://gpuweb.github.io
+[glTF]: https://img.shields.io/badge/gltf-%2387C540?style=for-the-badge&logo=gltf&logoColor=black&logoSize=auto
+[glTF-url]:https://www.khronos.org/gltf/

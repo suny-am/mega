@@ -16,4 +16,4 @@
 #include "resource-loaders/stb_image_write.h"
 // WebGPU Standard Utils
 #define WEBGPU_STD_UTILS_IMPLEMENTATION
-#include "webgpu-std-utils.hpp"
+#include "webgpu-utils/webgpu-std-utils.hpp"
