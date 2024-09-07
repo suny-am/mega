@@ -151,6 +151,8 @@ bool ResourceManager::loadGeometryFromGltf(const path& path, tinygltf::Model& mo
     bool success = false;
     if (path.extension() == ".glb") {
         success = loader.LoadBinaryFromFile(&model, &err, &warn, path.string());
+        // generate .gltf version for analysis purposes 
+        // loader.WriteGltfSceneToFile(&model, "outfile.gltf", true, true, true, false);
     }
     else {
         success = loader.LoadASCIIFromFile(&model, &err, &warn, path.string());
