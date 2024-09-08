@@ -189,9 +189,9 @@ TBD
 ## Roadmap
 
 - [ ] File parsing
-  - [x] Load .obj
+  - [x] native file dialog
   - [x] Load .gltf/glb
-  - [ ] native file dialog
+  - [ ] Load .obj into gltf format
   - [ ] TBD (🚧)
 - [ ] Dynamics
   - [x] World color
