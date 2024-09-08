@@ -122,6 +122,14 @@ fn Fd_Burley(NoV: f32, NoL: f32, LoH: f32, roughness: f32) -> f32 {
 // }
 // */
 
+// /* **************** UTILITIES **************** */
+
+// check that the provided baseColor is not vec3f(0.0), i.e. "colorless"
+fn validateColor(color: vec3f) -> bool {
+    return all(color != vec3f(0.0)); 
+}
+
+
 // /* **************** BINDINGS **************** */
 
 struct VertexInput {
@@ -189,8 +197,8 @@ struct MaterialUniforms {
 @group(1) @binding(2) var baseColorSampler: sampler;
 @group(1) @binding(3) var metallicRoughnessTexture: texture_2d<f32>;
 @group(1) @binding(4) var metallicRoughnessSampler: sampler;
-@group(1) @binding(3) var normalTexture: texture_2d<f32>;
-@group(1) @binding(4) var normalSampler: sampler;
+@group(1) @binding(5) var normalTexture: texture_2d<f32>;
+@group(1) @binding(6) var normalSampler: sampler;
 
 // Node bind group
 @group(2) @binding(0) var<uniform> uNode: NodeUniforms;
@@ -214,7 +222,14 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 	// Sample texture
-    let baseColor = textureSample(baseColorTexture, baseColorSampler, in.uv).rgb;
+    var baseColor = textureSample(baseColorTexture, baseColorSampler, in.uv).rgb;
+
+    let noTextureVecDefault = vec3f(0.0);
+
+    if !validateColor(baseColor) {
+        baseColor = uMaterial.baseColorFactor.rgb;
+    }
+
     let metallicRoughness = textureSample(metallicRoughnessTexture, metallicRoughnessSampler, in.uv).rgb;
 
     let material = MaterialProperties(

@@ -235,7 +235,7 @@ glm::mat3x3 ResourceManager::computeTBN(const VertexAttributes corners[3], const
 }
 
 void ResourceManager::loadDialogArgs(FileDialogArgs& args) {
-    args.filters[0] = { "Scenes", "glb, gltf" };
+    args.filters[0] = { "Scenes", "glb,gltf" };
     args.args.filterList = args.filters;
     args.args.filterCount = args.filterCount;
 }
