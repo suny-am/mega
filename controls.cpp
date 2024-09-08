@@ -6,11 +6,19 @@
 
 constexpr float PI = 3.14159265358979323846f;
 
+using MouseAction = Application::MouseAction;
+
 void Controls::updateMouseMove(double xPos, double yPos, DragState& drag, CameraState& cameraState) {
     vec2 currentPos = vec2(-(float)xPos, (float)yPos);
     vec2 delta = (currentPos - drag.startPos) * drag.sensitivity;
-    cameraState.angles = drag.startCameraState.angles + delta;
-    cameraState.angles.y = glm::clamp(cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
+
+    if (drag.mouseAction == MouseAction::Pan) {
+        cameraState.pan = drag.startCameraState.pan + delta;
+    }
+    else if (drag.mouseAction == MouseAction::Orbit) {
+        cameraState.angles = drag.startCameraState.angles + delta;
+        cameraState.angles.y = glm::clamp(cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
+    }
 }
 
 void Controls::smoothOut(double xPos, double yPos, DragState& drag) {
@@ -20,7 +28,7 @@ void Controls::smoothOut(double xPos, double yPos, DragState& drag) {
     drag.previousDelta = delta;
 }
 
-void Controls::updateMouseButton(int button, int action, int /* modifiers */, DragState& drag, CameraState& cameraState, GLFWwindow*& window) {
+void Controls::updateMouseButton(int button, int action, int mods, DragState& drag, CameraState& cameraState, GLFWwindow*& window) {
     ImGuiIO& io = ImGui::GetIO();
     if (io.WantCaptureMouse) {
         return;
@@ -28,6 +36,12 @@ void Controls::updateMouseButton(int button, int action, int /* modifiers */, Dr
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         switch (action) {
         case GLFW_PRESS:
+            if (mods == GLFW_MOD_ALT) {
+                drag.mouseAction = MouseAction::Pan;
+            }
+            else {
+                drag.mouseAction = MouseAction::Orbit;
+            }
             drag.active = true;
             double xPos, yPos;
             glfwGetCursorPos(window, &xPos, &yPos);
@@ -47,7 +61,7 @@ void Controls::updateScroll(double /* xOffset */, double yOffset, DragState& dra
 }
 
 bool Controls::updateDragInertia(DragState& drag, CameraState& cameraState) {
-    if (drag.active) {
+    if (drag.active && drag.mouseAction == MouseAction::Orbit) {
         constexpr float eps = 1e-4f;
         if (std::abs(drag.velocity.x) < eps && std::abs(drag.velocity.y) < eps) {
             return false;

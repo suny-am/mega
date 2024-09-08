@@ -38,7 +38,7 @@ bool Application::onInit() {
 	if (!initDepthBuffer()) return false;
 	if (!initBindGroupLayouts()) return false;
 	// m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/triangle.gltf";
-	m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/triangle.gltf";
+	m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/box.gltf";
 	// m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/BusterDrone.gltf";
 	// m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/DamagedHelmet.glb";
 	if (!initGeometry(m_filePath)) return false;
@@ -69,7 +69,7 @@ void Application::onFrame() {
 	}
 
 	glfwPollEvents();
-	Controls::updateDragInertia(*&m_drag, *&m_cameraState);
+	// Controls::updateDragInertia(*&m_drag, *&m_cameraState);
 	updateLightingUniforms();
 
 	// Update uniform buffer
@@ -80,10 +80,6 @@ void Application::onFrame() {
 	if (!nextTexture) {
 		std::cerr << "Could not acquire next texture from surface configuration" << std::endl;
 		return;
-	}
-
-	if (m_filePathHasChanged) {
-		updateGeometry();
 	}
 
 	CommandEncoderDescriptor commandEncoderDesc;
@@ -305,7 +301,6 @@ void Application::terminateWindowAndDevice() {
 	glfwDestroyWindow(m_window);
 	glfwTerminate();
 }
-
 
 bool Application::initSurfaceConfiguration()
 {
@@ -683,12 +678,14 @@ void Application::updateProjectionMatrix() {
 }
 
 void Application::updateViewMatrix() {
-	float cx = cos(m_cameraState.angles.x);
-	float sx = sin(m_cameraState.angles.x);
-	float cy = cos(m_cameraState.angles.y);
-	float sy = sin(m_cameraState.angles.y);
-	vec3 position = vec3(cx * cy, sx * cy, sy) * std::exp(-m_cameraState.zoom);
-	m_uniforms.viewMatrix = glm::lookAt(position, vec3(0.0f), vec3(0, 0, 1));
+	float cX = cos(m_cameraState.angles.x);
+	float sX = sin(m_cameraState.angles.x);
+	float cY = cos(m_cameraState.angles.y);
+	float sY = sin(m_cameraState.angles.y);
+	vec3 position = vec3(cX * cY, sX * cY, sY) * std::exp(-m_cameraState.zoom);
+	mat4x4 translationMatrix = glm::translate(mat4x4(1.0f), -vec3(m_cameraState.pan.x, m_cameraState.pan.y, 0.0f));
+	m_uniforms.viewMatrix = glm::lookAt(position, vec3(0.0), vec3(0, 0, 1));
+	m_uniforms.viewMatrix = translationMatrix * m_uniforms.viewMatrix;
 	m_queue->writeBuffer(
 		*m_uniformBuffer,
 		offsetof(GlobalUniforms, viewMatrix),

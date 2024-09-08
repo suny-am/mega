@@ -78,6 +78,12 @@ public:
 	using vec3 = glm::vec3;
 	using vec2 = glm::vec2;
 
+	enum MouseAction {
+		Orbit,
+		Zoom,
+		Pan
+	};
+
 	struct GlobalUniforms {
 		mat4x4 projectionMatrix;
 		mat4x4 viewMatrix;
@@ -102,6 +108,9 @@ public:
 		vec2 angles = { 0.8f, 0.5f };
 		// zoom is the position of the camera along its local forward axis, affected by the scroll wheel
 		float zoom = -1.2f;
+		// pan.x is the translation of the camera along the global vertical axis, affected by mouse.x
+		// pan.y is the translation of the camera along the local horizonal axis, affected by mouse.y
+		vec2 pan = { 0.0f, 0.0f };
 	};
 
 	struct DragState {
@@ -120,6 +129,7 @@ public:
 		vec2 velocity = { 0.0, 0.0 };
 		vec2 previousDelta;
 		float inertia = 0.9f;
+		MouseAction mouseAction = MouseAction::Orbit;
 	};
 
 	GlobalUniforms m_uniforms;
