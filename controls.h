@@ -10,7 +10,6 @@ public:
     static void updateMouseMove(double xPos, double yPos, DragState& drag, CameraState& cameraState);
     static void smoothOut(double xPos, double yPos, DragState& drag);
     static void updateMouseButton(int button, int action, int mods, DragState& drag, CameraState& cameraState, GLFWwindow*& window);
-    // TBD Add support for modifiers
     static void updateScroll(double /* xOffset */, double yOffset, DragState& drag, CameraState& cameraState);
     static bool updateDragInertia(DragState& drag, CameraState& cameraState);
 };
