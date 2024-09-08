@@ -215,6 +215,11 @@ TBD
 
 ## Resources
 
+### References
+
+- [W3C WebGPU Reference](https://www.w3.org/TR/webgpu/)
+- [W3C WGSL Reference](https://www.w3.org/TR/WGSL/)
+
 ### Assets
 
 - [Khronos Group glTF sample assets](https://github.com/KhronosGroup/glTF-Sample-Assets)
