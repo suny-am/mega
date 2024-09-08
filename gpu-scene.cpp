@@ -18,7 +18,7 @@ using namespace wgpu::gltf;
 // Public methods
 
 void GpuScene::createFromModel(
-	Device device,
+	raii::Device device,
 	const tinygltf::Model& model,
 	BindGroupLayout materialBindGroupLayout,
 	BindGroupLayout nodeBindGroupLayout
@@ -76,8 +76,10 @@ void GpuScene::destroy() {
 ///////////////////////////////////////////////////////////////////////////////
 // Private methods
 
-void GpuScene::initDevice(wgpu::Device device) {
-	m_device = std::move(device);
+void GpuScene::initDevice(wgpu::raii::Device device) {
+	if (m_device != device) {
+		m_device = device;
+	}
 	m_queue = m_device->getQueue();
 }
 

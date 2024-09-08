@@ -32,7 +32,7 @@ public:
 public:
 	// Create from a CPU-side tinygltf model (destroy previous data)
 	void createFromModel(
-		wgpu::Device device,
+		wgpu::raii::Device device,
 		const tinygltf::Model& model,
 		wgpu::BindGroupLayout materialBindGroupLayout,
 		wgpu::BindGroupLayout nodeBindGroupLayout
@@ -53,7 +53,7 @@ private:
 	// NB: All init functions assume that the object is new (empty) or that
 	// destroy() has just been called.
 
-	void initDevice(wgpu::Device device);
+	void initDevice(wgpu::raii::Device device);
 
 	void initBuffers(const tinygltf::Model& model);
 	void terminateBuffers();

@@ -38,7 +38,7 @@ bool Application::onInit() {
 	if (!initDepthBuffer()) return false;
 	if (!initBindGroupLayouts()) return false;
 	// m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/triangle.gltf";
-	m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/box.gltf";
+	m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/triangle.gltf";
 	// m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/BusterDrone.gltf";
 	// m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/DamagedHelmet.glb";
 	if (!initGeometry(m_filePath)) return false;
@@ -61,16 +61,16 @@ void Application::onFinish() {
 }
 
 void Application::onFrame() {
-	glfwPollEvents();
-	Controls::updateDragInertia(*&m_drag, *&m_cameraState);
-	updateLightingUniforms();
 
 	if (m_filePathHasChanged) {
-		bool success = initGeometry(m_filePath);
-		if (success) {
+		if (updateGeometry()) {
 			m_filePathHasChanged = false;
 		}
 	}
+
+	glfwPollEvents();
+	Controls::updateDragInertia(*&m_drag, *&m_cameraState);
+	updateLightingUniforms();
 
 	// Update uniform buffer
 	m_uniforms.time = static_cast<float>(glfwGetTime());
@@ -80,6 +80,10 @@ void Application::onFrame() {
 	if (!nextTexture) {
 		std::cerr << "Could not acquire next texture from surface configuration" << std::endl;
 		return;
+	}
+
+	if (m_filePathHasChanged) {
+		updateGeometry();
 	}
 
 	CommandEncoderDescriptor commandEncoderDesc;
@@ -431,18 +435,16 @@ bool Application::initRenderPipelines() {
 	pipelineDesc.layout = layout;
 
 
-	if (m_vertexData.empty()) {
-		for (uint32_t pipelineIdx = 0; pipelineIdx < m_gpuScene.renderPipelineCount(); ++pipelineIdx) {
-			std::vector<VertexBufferLayout> vertexBufferLayouts = m_gpuScene.vertexBufferLayouts(pipelineIdx);
-			pipelineDesc.vertex.bufferCount = static_cast<uint32_t>(vertexBufferLayouts.size());
-			pipelineDesc.vertex.buffers = vertexBufferLayouts.data();
-			pipelineDesc.primitive.topology = m_gpuScene.primitiveTopology(pipelineIdx);
+	for (uint32_t pipelineIdx = 0; pipelineIdx < m_gpuScene.renderPipelineCount(); ++pipelineIdx) {
+		std::vector<VertexBufferLayout> vertexBufferLayouts = m_gpuScene.vertexBufferLayouts(pipelineIdx);
+		pipelineDesc.vertex.bufferCount = static_cast<uint32_t>(vertexBufferLayouts.size());
+		pipelineDesc.vertex.buffers = vertexBufferLayouts.data();
+		pipelineDesc.primitive.topology = m_gpuScene.primitiveTopology(pipelineIdx);
 
-			RenderPipeline pipeline = m_device->createRenderPipeline(pipelineDesc);
-			std::cout << "Render pipeline: " << pipeline << std::endl;
-			if (pipeline == nullptr) return false;
-			m_pipelines.push_back(pipeline);
-		}
+		RenderPipeline pipeline = m_device->createRenderPipeline(pipelineDesc);
+		std::cout << "Render pipeline: " << pipeline << std::endl;
+		if (pipeline == nullptr) return false;
+		m_pipelines.push_back(pipeline);
 	}
 
 	return true;
@@ -456,20 +458,31 @@ bool Application::initGeometry(const ResourceManager::path& filePath) {
 	auto extension = filePath.extension();
 	bool success = false;
 
-	std::cout << "Loading file from path: " << filePath << std::endl;
-
 	if (extension == ".glb" || extension == ".gltf") {
+		std::cout << "loading glTF file" << filePath << std::endl;
 		success = ResourceManager::loadGeometryFromGltf(filePath, m_cpuScene);
-		m_gpuScene.createFromModel(*m_device, m_cpuScene, *m_materialBindGroupLayout, *m_nodeBindGroupLayout);
+		std::cout << "Creating scene from glTF..." << std::endl;
+		m_gpuScene.createFromModel(m_device, m_cpuScene, *m_materialBindGroupLayout, *m_nodeBindGroupLayout);
+		m_cpuScene = {};
 	}
 	else if (extension == ".obj") {
-		success = ResourceManager::loadGeometryFromObj(filePath, m_vertexData);
+		std::cout << "loading OBJ file" << filePath << std::endl;
+		std::cout << "Creating scene from OBJ..." << std::endl;
+		// success = /* TBD Generate glTF from OBJ */
 	}
 
 	if (!success) {
 		std::cerr << "Could not load geometry!" << std::endl;
 	}
 	return success;
+}
+
+bool Application::updateGeometry() {
+	terminateRenderPipelines();
+	if (initGeometry(m_filePath) && initRenderPipelines()) {
+		return true;
+	}
+	return false;
 }
 
 void Application::terminateGeometry() {
