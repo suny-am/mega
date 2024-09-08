@@ -53,6 +53,7 @@ private:
 	void terminateRenderPipelines();
 
 	bool initGeometry(const ResourceManager::path& filePath);
+	bool updateGeometry();
 	void terminateGeometry();
 
 	bool initUniforms();
@@ -149,8 +150,6 @@ private:
 
 	tinygltf::Model m_cpuScene;
 	GpuScene m_gpuScene;
-
-	std::vector<VertexAttributes> m_vertexData;
 
 	raii::Buffer m_uniformBuffer;
 	raii::Buffer m_lightingUniformBuffer;
