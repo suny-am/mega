@@ -50,6 +50,7 @@ void GpuScene::draw(wgpu::RenderPassEncoder renderPass, uint32_t renderPipelineI
 					renderPass.setVertexBuffer(slot, *m_nullBuffer, 0, 4 * sizeof(float));
 				}
 			}
+
 			renderPass.setBindGroup(1, *m_materials[prim.materialIndex].bindGroup, 0, nullptr);
 			assert(prim.indexBufferView.byteStride == 0 || prim.indexBufferView.byteStride == indexFormatByteSize(prim.indexFormat));
 			renderPass.setIndexBuffer(
@@ -235,6 +236,7 @@ void GpuScene::initSamplers(const tinygltf::Model& model) {
 
 	m_defaultSamplerIdx = static_cast<uint32_t>(m_samplers.size());
 	desc.label = "Default";
+	desc.maxAnisotropy = 1.0;
 	m_samplers.push_back(m_device->createSampler(desc));
 }
 
@@ -508,7 +510,7 @@ void GpuScene::initDrawCalls(const tinygltf::Model& model) {
 			std::vector<GpuBufferView> vertexBufferLayoutToGpuBufferView;
 			// And we keep the map from bufferView to layout index
 			// NB: The index '-1' is used for attributes expected by the shader but not
-			// provided by the GLTF file.
+			// provided by the glTF file.
 			std::unordered_map<int, size_t> gpuBufferViewToVertexBufferLayout;
 
 			for (const auto& [attrSemantic, location, defaultFormat] : semanticToLocation) {
@@ -517,6 +519,7 @@ void GpuScene::initDrawCalls(const tinygltf::Model& model) {
 				uint64_t attrByteOffset = 0;
 
 				auto accessorIt = prim.attributes.find(attrSemantic);
+
 				if (accessorIt != prim.attributes.end()) {
 					Accessor accessor = model.accessors[accessorIt->second];
 					const BufferView& bufferView = model.bufferViews[accessor.bufferView];
@@ -563,6 +566,7 @@ void GpuScene::initDrawCalls(const tinygltf::Model& model) {
 				attrib.shaderLocation = location;
 				attrib.format = format;
 				attrib.offset = attrByteOffset;
+
 				vertexBufferLayoutToAttributes[layoutIdx].push_back(attrib);
 			}
 

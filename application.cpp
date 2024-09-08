@@ -37,7 +37,10 @@ bool Application::onInit() {
 	if (!initSurfaceConfiguration()) return false;
 	if (!initDepthBuffer()) return false;
 	if (!initBindGroupLayouts()) return false;
-	m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/DamagedHelmet.glb";
+	// m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/triangle.gltf";
+	m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/box.gltf";
+	// m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/BusterDrone.gltf";
+	// m_filePath = (ResourceManager::path)RESOURCE_DIR "/scenes/DamagedHelmet.glb";
 	if (!initGeometry(m_filePath)) return false;
 	if (!initRenderPipelines()) return false;
 	if (!initUniforms()) return false;
@@ -259,6 +262,7 @@ bool Application::initWindowAndDevice() {
 		std::cout << "Device error: type " << type;
 		if (message)  std::cout << " (message: " << message << ")";
 		std::cout << std::endl;
+		exit(1);
 																 });
 
 	m_queue = m_device->getQueue();
@@ -482,6 +486,7 @@ bool Application::initUniforms() {
 	m_uniformBuffer = m_device->createBuffer(bufferDesc);
 
 	// Upload the initial value of the uniforms
+	m_uniforms.modelMatrix = mat4x4(1.0);
 	m_uniforms.viewMatrix = glm::lookAt(vec3(-2.0f, -3.0f, 2.0f), vec3(0.0f), vec3(0, 0, 1));
 	m_uniforms.projectionMatrix = glm::perspective(45 * PI / 180, 640.0f / 480.0f, 0.01f, 100.0f);
 	m_uniforms.time = 1.0f;

@@ -189,9 +189,9 @@ TBD
 ## Roadmap
 
 - [ ] File parsing
-  - [x] Load .obj
+  - [x] native file dialog
   - [x] Load .gltf/glb
-  - [ ] native file dialog
+  - [ ] Load .obj into gltf format
   - [ ] TBD (🚧)
 - [ ] Dynamics
   - [x] World color
@@ -214,6 +214,11 @@ TBD
 <!-- RESOURCES -->
 
 ## Resources
+
+### References
+
+- [W3C WebGPU Reference](https://www.w3.org/TR/webgpu/)
+- [W3C WGSL Reference](https://www.w3.org/TR/WGSL/)
 
 ### Assets
 

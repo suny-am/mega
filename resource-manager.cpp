@@ -151,6 +151,8 @@ bool ResourceManager::loadGeometryFromGltf(const path& path, tinygltf::Model& mo
     bool success = false;
     if (path.extension() == ".glb") {
         success = loader.LoadBinaryFromFile(&model, &err, &warn, path.string());
+        // generate .gltf version for analysis purposes 
+        // loader.WriteGltfSceneToFile(&model, "outfile.gltf", true, true, true, false);
     }
     else {
         success = loader.LoadASCIIFromFile(&model, &err, &warn, path.string());
@@ -233,7 +235,7 @@ glm::mat3x3 ResourceManager::computeTBN(const VertexAttributes corners[3], const
 }
 
 void ResourceManager::loadDialogArgs(FileDialogArgs& args) {
-    args.filters[0] = { "Scenes", "glb, gltf" };
+    args.filters[0] = { "Scenes", "glb,gltf" };
     args.args.filterList = args.filters;
     args.args.filterCount = args.filterCount;
 }

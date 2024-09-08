@@ -80,6 +80,7 @@ public:
 	struct GlobalUniforms {
 		mat4x4 projectionMatrix;
 		mat4x4 viewMatrix;
+		mat4x4 modelMatrix;
 		vec4 worldColor;
 		vec3 cameraWorldPosition;
 		float time;
