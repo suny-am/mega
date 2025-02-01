@@ -205,7 +205,7 @@ TBD
 - [ ] Camera control
   - [x] Orbit (turntable)
   - [x] Zoom
-  - [ ] Pan
+  - [x] Pan
   - [ ] TBD (🚧)
 - [ ] TBD (🚧)
 
