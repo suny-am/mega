@@ -7,6 +7,9 @@
 [Bb]uild-wgpu/
 [Bb]uild-emscripten/
 
+# clangd cache
+.cache/*
+
 # Compiled Object files
 *.slo
 *.lo

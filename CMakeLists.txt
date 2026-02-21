@@ -44,4 +44,5 @@ endif()
 if (EMSCRIPTEN)
 	# Generate a full web page rather than a simple WebAssembly module
 	set_target_properties(App PROPERTIES SUFFIX ".html")
+  target_link_options(App PRIVATE -sASYNCIFY)
 endif()
