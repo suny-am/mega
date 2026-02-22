@@ -7,13 +7,22 @@ project(
 	LANGUAGES CXX C
 )
 
-# Include webgpu directory, to define the 'webgpu' target
+if (NOT EMSCRIPTEN)
+  add_subdirectory(glfw)
+else()
+  add_library(glfw INTERFACE)
+  target_link_options(glfw INTERFACE -sUSE_GLFW=3)
+endif()
+
 add_subdirectory(webgpu)
+add_subdirectory(glfw3webgpu)
 
 add_executable(App main.cpp)
 
 # Add the 'webgpu' target as a dependency of our App
-target_link_libraries(App PRIVATE webgpu)
+target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu)
+
+target_copy_webgpu_binaries(App)
 
 # The application's binary must find wgpu.dll or libwgpu.so at runtime,
 # so we automatically copy it (it's called WGPU_RUNTIME_LIB in general)
