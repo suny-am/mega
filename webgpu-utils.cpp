@@ -1,5 +1,6 @@
 #include "webgpu-utils.h"
 #include <cassert>
+#include <cstddef>
 #include <iostream>
 #include <vector>
 
@@ -7,86 +8,15 @@
 #include <emscripten.h>
 #endif // __EMSCRIPTEN__
 
-WGPUAdapter requestAdapterSync(WGPUInstance instance,
-                               WGPURequestAdapterOptions const *options) {
-  struct UserData {
-    WGPUAdapter adapter = nullptr;
-    bool requestEnded = false;
-  };
-
-  UserData userData;
-
-  auto onAdapterRequestEnded = [](WGPURequestAdapterStatus status,
-                                  WGPUAdapter adapter, char const *message,
-                                  void *pUserData) {
-    UserData &userData = *reinterpret_cast<UserData *>(pUserData);
-    if (status == WGPURequestAdapterStatus_Success) {
-      userData.adapter = adapter;
-    } else {
-      std::cout << "Could not get WebGPUdapter: " << message << std::endl;
-    }
-    userData.requestEnded = true;
-  };
-
-  wgpuInstanceRequestAdapter(instance, options, onAdapterRequestEnded,
-                             (void *)&userData);
-
-#ifdef __EMSCRIPTEN__
-  while (!userData.requestEnded) {
-    emscripten_sleep(100);
-  }
-#endif // __EMSCRIPTEN__
-       //
-  assert(userData.requestEnded);
-
-  return userData.adapter;
-}
-
-WGPUDevice requestDeviceSync(WGPUAdapter adapter,
-                             WGPUDeviceDescriptor const *descriptor) {
-  struct UserData {
-    WGPUDevice device = nullptr;
-    bool requestEnded = false;
-  };
-  UserData userData;
-
-  auto onDeviceRequestEnded = [](WGPURequestDeviceStatus status,
-                                 WGPUDevice device, char const *message,
-                                 void *pUserData) {
-    UserData &userData = *reinterpret_cast<UserData *>(pUserData);
-    if (status == WGPURequestDeviceStatus_Success) {
-      userData.device = device;
-    } else {
-      std::cout << "Could not get WebGPU device: " << message << std::endl;
-    }
-    userData.requestEnded = true;
-  };
-
-  wgpuAdapterRequestDevice(adapter, descriptor, onDeviceRequestEnded,
-                           (void *)&userData);
-
-#ifdef __EMSCRIPTEN__
-  while (!userData.requestEnded) {
-    emscripten_sleep(100);
-  }
-#endif
-
-  assert(userData.requestEnded);
-
-  return userData.device;
-}
-
-void inspectAdapter(WGPUAdapter adapter) {
+void inspectAdapter(Adapter adapter) {
 #ifndef __EMSCRIPTEN__
 
-  WGPUSupportedLimits supportedLimits = {};
-  supportedLimits.nextInChain = nullptr;
+  SupportedLimits supportedLimits = {};
 
-#ifdef WEBGPU_BACKEN_DAWN
-  bool success =
-      wgpuAdapterGetLimits(adapter, &supportedLimits) == WGPUStatus_Success;
+#ifdef WEBGPU_BACKEND_DAWN
+  bool success = adapter.getLimits(&supportedLimits) = Status::Success;
 #else
-  bool success = wgpuAdapterGetLimits(adapter, &supportedLimits);
+  bool success = adapter.getLimits(&supportedLimits);
 #endif
 
   if (success) {
@@ -102,13 +32,9 @@ void inspectAdapter(WGPUAdapter adapter) {
   }
 #endif
 
-  std::vector<WGPUFeatureName> features;
-
-  size_t featureCount = wgpuAdapterEnumerateFeatures(adapter, nullptr);
-
-  features.resize(featureCount);
-
-  wgpuAdapterEnumerateFeatures(adapter, features.data());
+  size_t featureCount = adapter.enumerateFeatures(nullptr);
+  std::vector<FeatureName> features(featureCount, FeatureName::Undefined);
+  adapter.enumerateFeatures(features.data());
 
   std::cout << "Adapter features:" << std::endl;
   std::cout << std::hex;
@@ -117,9 +43,8 @@ void inspectAdapter(WGPUAdapter adapter) {
   }
   std::cout << std::dec;
 
-  WGPUAdapterProperties properties = {};
-  properties.nextInChain = nullptr;
-  wgpuAdapterGetProperties(adapter, &properties);
+  AdapterProperties properties = {};
+  adapter.getProperties(&properties);
   std::cout << "Adapter properties:" << std::endl;
   std::cout << " - vendorID: " << properties.vendorID << std::endl;
   if (properties.vendorName) {
@@ -142,11 +67,10 @@ void inspectAdapter(WGPUAdapter adapter) {
   std::cout << std::dec; // Restore decimal numbers
 }
 
-void inspectDevice(WGPUDevice device) {
-  std::vector<WGPUFeatureName> features;
-  size_t featureCount = wgpuDeviceEnumerateFeatures(device, nullptr);
-  features.resize(featureCount);
-  wgpuDeviceEnumerateFeatures(device, features.data());
+void inspectDevice(Device device) {
+  size_t featureCount = device.enumerateFeatures(nullptr);
+  std::vector<FeatureName> features(featureCount, FeatureName::Undefined);
+  device.enumerateFeatures(features.data());
 
   std::cout << "Device features:" << std::endl;
   std::cout << std::hex;
@@ -155,13 +79,13 @@ void inspectDevice(WGPUDevice device) {
   }
   std::cout << std::dec;
 
-  WGPUSupportedLimits limits = {};
+  SupportedLimits limits = {};
   limits.nextInChain = nullptr;
 
 #ifdef WEBGPU_BACKEND_DAWN
-  bool success = wgpuDeviceGetLimits(device, &limits) == WGPUStatus_Success;
+  bool success = device.getLimits(&limits) = Status::Success;
 #else
-  bool success = wgpuDeviceGetLimits(device, &limits);
+  bool success = device.getLimits(&limits);
 #endif
 
   if (success) {
@@ -174,6 +98,6 @@ void inspectDevice(WGPUDevice device) {
               << limits.limits.maxTextureDimension3D << std::endl;
     std::cout << " - maxTextureArrayLayers: "
               << limits.limits.maxTextureArrayLayers << std::endl;
-    // [...] Extra device limits
+    // TODO: Extra device limits go here
   }
 }

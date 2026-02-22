@@ -1,13 +1,9 @@
 #pragma once
 
-#include <webgpu/webgpu.h>
+#include <webgpu/webgpu.hpp>
 
-WGPUAdapter requestAdapterSync(WGPUInstance instance,
-                               WGPURequestAdapterOptions const *options);
+using namespace wgpu;
 
-WGPUDevice requestDeviceSync(WGPUAdapter adapter,
-                             WGPUDeviceDescriptor const *descriptor);
-
-void inspectAdapter(WGPUAdapter adapter);
+void inspectAdapter(Adapter adapter);
 
 void inspectDevice(WGPUDevice device);
