@@ -1,10 +1,14 @@
 // Include WebGPU header
+#include "build/_deps/webgpu-backend-wgpu-src/include/webgpu/webgpu.h"
 #include <cassert>
 #include <cstddef>
 #include <webgpu/webgpu.h>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif // __EMSCRIPTEN__
+#ifdef WEBGPU_BACKEND_WGPU
+#include <webgpu/wgpu.h>
+#endif // WEBGPU_BACKEND_WGPU
 #include <iostream>
 
 WGPUDevice requestDeviceSync(WGPUAdapter adapter,
@@ -261,9 +265,50 @@ int main(int, char **) {
   wgpuDeviceSetUncapturedErrorCallback(device, onDeviceError,
                                        nullptr /* pUserData */);
 
+  WGPUQueue queue = wgpuDeviceGetQueue(device);
+
+  auto onQueueWorkDone = [](WGPUQueueWorkDoneStatus status,
+                            void * /* pUserData */) {
+    std::cout << "Queued work finished with status: " << status << std::endl;
+  };
+  wgpuQueueOnSubmittedWorkDone(queue, onQueueWorkDone, nullptr /* pUserData */);
+
+  WGPUCommandEncoderDescriptor encoderDesc = {};
+  encoderDesc.nextInChain = nullptr;
+  encoderDesc.label = "Debug command encoder";
+  WGPUCommandEncoder encoder =
+      wgpuDeviceCreateCommandEncoder(device, &encoderDesc);
+
+  wgpuCommandEncoderInsertDebugMarker(encoder, "First command");
+  wgpuCommandEncoderInsertDebugMarker(encoder, "Second command");
+
+  WGPUCommandBufferDescriptor cmdBufferDesc = {};
+  cmdBufferDesc.nextInChain = nullptr;
+  cmdBufferDesc.label = "Command buffer";
+  WGPUCommandBuffer command = wgpuCommandEncoderFinish(encoder, &cmdBufferDesc);
+
+  std::cout << "Submitting command..." << std::endl;
+  wgpuQueueSubmit(queue, 1, &command);
+  wgpuCommandBufferRelease(command);
+  std::cout << "Command submitted" << std::endl;
+
+  for (int i = 0; i < 5; ++i) {
+#if defined(WEBGPU_BACKEND_DAWN)
+    std::cout << "Waiting for tick..." << std::endl;
+    wgpuDeviceTick(device);
+#elif defined(WEBGPU_BACKEND_WGPU)
+    std::cout << "Polling device..." << std::endl;
+    wgpuDevicePoll(device, false, nullptr);
+#elif defined(WEBGPU_BACKEND_EMSCRIPTEN)
+    std::cout << "Sleeping for 100ms..." << std::endl;
+    emscripten_sleep(100);
+#endif
+  }
+
   // Clean up
   wgpuInstanceRelease(instance);
   wgpuDeviceRelease(device);
+  wgpuQueueRelease(queue);
 
   return 0;
 }
