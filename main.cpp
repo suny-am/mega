@@ -1,4 +1,6 @@
 // Include WebGPU header
+#include <cstddef>
+#include <unistd.h>
 #define WEBGPU_CPP_IMPLEMENTATION
 #include <webgpu/webgpu.hpp>
 
@@ -17,6 +19,26 @@
 
 using namespace wgpu;
 
+const char *shaderSource = R"(
+    @vertex
+    fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4f {
+        var p = vec2f(0.0, 0.0);
+        if (in_vertex_index == 0u) {
+            p = vec2f(-0.5, -0.5);
+        } else if (in_vertex_index == 1u) {
+            p = vec2f(0.5, -0.5);
+        } else {
+            p = vec2f(0.0, 0.5);
+        }
+        return vec4f(p, 0.0, 1.0);
+    }
+
+    @fragment
+    fn fs_main() -> @location(0) vec4f {
+        return vec4f(0.0, 0.4, 1.0, 1.0);
+    }
+)";
+
 class Application {
 public:
   bool Initialize();
@@ -29,12 +51,16 @@ public:
 
 private:
   TextureView _GetNextSurfaceViewData();
+  void _InitializePipeline();
 
 private:
   GLFWwindow *window;
   Device device;
   Queue queue;
   Surface surface;
+  std::unique_ptr<ErrorCallback> uncapturedErrorCallbackHandle;
+  RenderPipeline pipeline;
+  TextureFormat surfaceFormat = TextureFormat::Undefined;
 };
 
 bool Application::Initialize() {
@@ -43,7 +69,7 @@ bool Application::Initialize() {
   glfwWindowHint(GLFW_CLIENT_API,
                  GLFW_NO_API); // <-- extra info for glfwCreateWindow
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  window = glfwCreateWindow(640, 480, "Learn WebGPU", nullptr, nullptr);
+  window = glfwCreateWindow(640, 480, "Mega", nullptr, nullptr);
 
   // NOTE: configure instance
   InstanceDescriptor desc = {};
@@ -99,7 +125,7 @@ bool Application::Initialize() {
   deviceDesc.requiredFeatureCount = 0; // we do not require any specific feature
   deviceDesc.requiredLimits = nullptr; // we do not require any specific limit
   deviceDesc.defaultQueue.label = "The default queue";
-  // Good for debugging
+  // NOTE: Good for debugging
   deviceDesc.deviceLostCallback = [](WGPUDeviceLostReason reason,
                                      char const *message,
                                      void * /* pUserData */) {
@@ -115,12 +141,13 @@ bool Application::Initialize() {
   inspectDevice(device);
 
   // Good for debugging
-  device.setUncapturedErrorCallback([](ErrorType type, char const *message) {
-    std::cout << "Uncaptured device error: type " << type;
-    if (message)
-      std::cout << " (" << message << ")";
-    std::cout << std::endl;
-  });
+  uncapturedErrorCallbackHandle = device.setUncapturedErrorCallback(
+      [](ErrorType type, char const *message) {
+        std::cout << "Uncaptured device error: type " << type;
+        if (message)
+          std::cout << " (" << message << ")";
+        std::cout << std::endl;
+      });
 
   queue = device.getQueue();
 
@@ -128,7 +155,7 @@ bool Application::Initialize() {
 
   surfaceConfig.width = 640;
   surfaceConfig.height = 480;
-  TextureFormat surfaceFormat = surface.getPreferredFormat(adapter);
+  surfaceFormat = surface.getPreferredFormat(adapter);
   surfaceConfig.format = surfaceFormat;
   surfaceConfig.viewFormatCount = 0;
   surfaceConfig.viewFormats = nullptr;
@@ -141,11 +168,14 @@ bool Application::Initialize() {
   // NOTE: Once we have the device, we no longer need the adapter
   adapter.release();
 
+  _InitializePipeline();
+
   return true;
 }
 
 void Application::Terminate() {
   // NOTE: Clean up
+  pipeline.release();
   surface.unconfigure();
   queue.release();
   surface.release();
@@ -189,13 +219,14 @@ void Application::MainLoop() {
   renderPassDesc.timestampWrites = nullptr;
 
   // NOTE: Create the render pass encoder
-  RenderPassEncoder renderPassEncoder = encoder.beginRenderPass(renderPassDesc);
-  // NOTE: use render pass
-  renderPassEncoder.end();
-  renderPassEncoder.release();
+  RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
-  encoder.insertDebugMarker("First command");
-  encoder.insertDebugMarker("Second command");
+  renderPass.setPipeline(pipeline);
+  renderPass.draw(3, 1, 0, 0);
+
+  // NOTE: use render pass
+  renderPass.end();
+  renderPass.release();
 
   CommandBufferDescriptor cmdBufferDesc = {};
   cmdBufferDesc.label = "Command buffer";
@@ -207,11 +238,8 @@ void Application::MainLoop() {
   command.release();
   std::cout << "Command submitted" << std::endl;
 
-  // NOTE: Release texture at the end of the current frame
   targetView.release();
 #ifndef __EMSCRIPTEN
-  // NOTE: Emscripten handles surface presentation within it's
-  // emscripten_set_main_loop_arg (via requestAnimationFrame in JavaScript)
   surface.present();
 #endif // !__EMSCRIPTEN__
        //
@@ -254,6 +282,82 @@ TextureView Application::_GetNextSurfaceViewData() {
 #endif // !WEBGPU_BACKEND_WGPU
 
   return targetView;
+}
+
+void Application::_InitializePipeline() {
+  // NOTE: Create shader module
+  ShaderModuleDescriptor shaderDesc;
+#ifdef WEBGPU_BACKEND_WGPU
+  shaderDesc.hintCount = 0;
+  shaderDesc.hints = nullptr;
+#endif
+
+  ShaderModuleWGSLDescriptor shaderCodeDesc;
+  shaderCodeDesc.chain.next = nullptr;
+  shaderCodeDesc.chain.sType = SType::ShaderModuleWGSLDescriptor;
+  shaderDesc.nextInChain = &shaderCodeDesc.chain;
+
+  shaderCodeDesc.code = shaderSource;
+
+  ShaderModule shaderModule = device.createShaderModule(shaderDesc);
+
+  // NOTE: Describe pipeline
+  RenderPipelineDescriptor pipelineDesc;
+
+  // NOTE: Describe pipeline
+  pipelineDesc.vertex.bufferCount = 0;
+  pipelineDesc.vertex.buffers = nullptr;
+
+  pipelineDesc.vertex.module = shaderModule;
+  pipelineDesc.vertex.entryPoint = "vs_main";
+  pipelineDesc.vertex.constantCount = 0;
+  pipelineDesc.vertex.constants = nullptr;
+
+  pipelineDesc.primitive.topology = PrimitiveTopology::TriangleList;
+  pipelineDesc.primitive.stripIndexFormat = IndexFormat::Undefined;
+  pipelineDesc.primitive.frontFace = FrontFace::CCW;
+  // NOTE: good for develipment; as non-manyfold topology can sometimes be
+  // obscured
+  pipelineDesc.primitive.cullMode = CullMode::None;
+
+  FragmentState fragmentState;
+  fragmentState.module = shaderModule;
+  fragmentState.entryPoint = "fs_main";
+  fragmentState.constantCount = 0;
+  fragmentState.constants = nullptr;
+
+  // NOTE: we do not use stencil/depth testing for now
+  pipelineDesc.depthStencil = nullptr;
+
+  BlendState blendState;
+  blendState.color.srcFactor = BlendFactor::SrcAlpha;
+  blendState.color.dstFactor = BlendFactor::OneMinusSrcAlpha;
+  blendState.color.operation = BlendOperation::Add;
+
+  blendState.alpha.srcFactor = BlendFactor::Zero;
+  blendState.alpha.dstFactor = BlendFactor::One;
+  blendState.alpha.operation = BlendOperation::Add;
+
+  ColorTargetState colorTarget;
+  colorTarget.format = surfaceFormat;
+  colorTarget.blend = &blendState;
+  colorTarget.writeMask = ColorWriteMask::All;
+
+  fragmentState.targetCount = 1;
+  fragmentState.targets = &colorTarget;
+
+  pipelineDesc.fragment = &fragmentState;
+  // NOTE: sammple per pixel
+  pipelineDesc.multisample.count = 1;
+  // NOTE: default value for mask, meaning "all bits on"
+  pipelineDesc.multisample.mask = ~0u;
+  // NOTE: Default value as well (irrelevant for count = 1 anyways)
+  pipelineDesc.multisample.alphaToCoverageEnabled = false;
+  pipelineDesc.layout = nullptr;
+
+  pipeline = device.createRenderPipeline(pipelineDesc);
+
+  shaderModule.release();
 }
 
 int main(int, char **) {
