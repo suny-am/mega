@@ -1,5 +1,6 @@
 // Include WebGPU header
 #include <cstddef>
+#include <cstdint>
 #include <unistd.h>
 #define WEBGPU_CPP_IMPLEMENTATION
 #include <webgpu/webgpu.hpp>
@@ -39,6 +40,19 @@ const char *shaderSource = R"(
     }
 )";
 
+void wgpuPollEvents([[maybe_unused]] Device device,
+                    [[maybe_unused]] bool yieldToWebBrowser) {
+#if defined(WEBGPU_BACKEND_DAWN)
+  device.tick();
+#elif defined(WEBGPU_BACKEND_WGPU)
+  device.poll(false);
+#elif defined(WEBGPU_BACKEND_EMSCRIPTEN)
+  if (yieldToWebBrowser) {
+    emscripten_sleep(100);
+  }
+#endif
+}
+
 class Application {
 public:
   bool Initialize();
@@ -52,6 +66,7 @@ public:
 private:
   TextureView _GetNextSurfaceViewData();
   void _InitializePipeline();
+  void _PlayingWithBuffers();
 
 private:
   GLFWwindow *window;
@@ -169,6 +184,8 @@ bool Application::Initialize() {
   adapter.release();
 
   _InitializePipeline();
+
+  _PlayingWithBuffers();
 
   return true;
 }
@@ -358,6 +375,73 @@ void Application::_InitializePipeline() {
   pipeline = device.createRenderPipeline(pipelineDesc);
 
   shaderModule.release();
+}
+
+void Application::_PlayingWithBuffers() {
+
+  // Experimentation for the "Playing with buffer" chapter
+  BufferDescriptor bufferDesc;
+  bufferDesc.label = "Some GPU-side data buffer";
+  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::CopySrc;
+  bufferDesc.size = 16;
+  bufferDesc.mappedAtCreation = false;
+  Buffer buffer1 = device.createBuffer(bufferDesc);
+  bufferDesc.label = "Output buffer";
+  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::MapRead;
+  Buffer buffer2 = device.createBuffer(bufferDesc);
+
+  // Create some CPU-side data buffer (of size 16 bytes)
+  std::vector<uint8_t> numbers(16);
+  for (uint8_t i = 0; i < 16; ++i)
+    numbers[i] = i;
+  // `numbers` now contains [ 0, 1, 2, ... ]
+
+  // Copy this from `numbers` (RAM) to `buffer1` (VRAM)
+  queue.writeBuffer(buffer1, 0, numbers.data(), numbers.size());
+
+  CommandEncoder encoder = device.createCommandEncoder(Default);
+
+  // After creating the command encoder
+  encoder.copyBufferToBuffer(buffer1, 0, buffer2, 0, 16);
+
+  CommandBuffer command = encoder.finish(Default);
+  encoder.release();
+  queue.submit(1, &command);
+  command.release();
+
+  struct Context {
+    bool ready;
+    Buffer buffer;
+  };
+
+  auto onBuffer2Mapped = [](WGPUBufferMapAsyncStatus status, void *pUserData) {
+    Context *context = reinterpret_cast<Context *>(pUserData);
+    context->ready = true;
+    std::cout << "Buffer 2 mapped with status " << status << std::endl;
+    if (status != BufferMapAsyncStatus::Success)
+      return;
+
+    uint8_t *bufferData = (uint8_t *)context->buffer.getConstMappedRange(0, 16);
+
+    context->buffer.unmap();
+
+    std::cout << "bufferData = [";
+    for (int i = 0; i < 16; ++i) {
+      if (i > 0)
+        std::cout << ", ";
+      std::cout << (int)bufferData[i];
+    }
+    std::cout << "]" << std::endl;
+  };
+
+  Context context = {false, buffer2};
+
+  wgpuBufferMapAsync(buffer2, MapMode::Read, 0, 16, onBuffer2Mapped,
+                     (void *)&context);
+
+  while (!context.ready) {
+    wgpuPollEvents(device, true /* yieldToBrowser */);
+  }
 }
 
 int main(int, char **) {
