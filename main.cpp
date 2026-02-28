@@ -1,7 +1,9 @@
 // Include WebGPU header
 #include <cstddef>
 #include <cstdint>
+#include <sys/types.h>
 #include <unistd.h>
+#include <vector>
 #define WEBGPU_CPP_IMPLEMENTATION
 #include <webgpu/webgpu.hpp>
 
@@ -22,16 +24,8 @@ using namespace wgpu;
 
 const char *shaderSource = R"(
     @vertex
-    fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4f {
-        var p = vec2f(0.0, 0.0);
-        if (in_vertex_index == 0u) {
-            p = vec2f(-0.5, -0.5);
-        } else if (in_vertex_index == 1u) {
-            p = vec2f(0.5, -0.5);
-        } else {
-            p = vec2f(0.0, 0.5);
-        }
-        return vec4f(p, 0.0, 1.0);
+    fn vs_main(@location(0) in_vertex_position: vec2f) -> @builtin(position) vec4f {
+        return vec4f(in_vertex_position, 0.0, 1.0);
     }
 
     @fragment
@@ -66,7 +60,8 @@ public:
 private:
   TextureView _GetNextSurfaceViewData();
   void _InitializePipeline();
-  void _PlayingWithBuffers();
+  void _InitializeBuffers();
+  RequiredLimits _GetRequiredLimits(Adapter adapter) const;
 
 private:
   GLFWwindow *window;
@@ -76,6 +71,9 @@ private:
   std::unique_ptr<ErrorCallback> uncapturedErrorCallbackHandle;
   RenderPipeline pipeline;
   TextureFormat surfaceFormat = TextureFormat::Undefined;
+
+  Buffer vertexBuffer;
+  uint32_t vertexCount;
 };
 
 bool Application::Initialize() {
@@ -135,10 +133,12 @@ bool Application::Initialize() {
 
   std::cout << "Requesting device..." << std::endl;
   // NOTE: configure device
+  RequiredLimits requiredLimits = _GetRequiredLimits(adapter);
+
   DeviceDescriptor deviceDesc = {};
   deviceDesc.label = "My Device";      // TODO: set to adapter deviceID
   deviceDesc.requiredFeatureCount = 0; // we do not require any specific feature
-  deviceDesc.requiredLimits = nullptr; // we do not require any specific limit
+  deviceDesc.requiredLimits = &requiredLimits;
   deviceDesc.defaultQueue.label = "The default queue";
   // NOTE: Good for debugging
   deviceDesc.deviceLostCallback = [](WGPUDeviceLostReason reason,
@@ -149,6 +149,7 @@ bool Application::Initialize() {
       std::cout << " (" << message << ")";
     std::cout << std::endl;
   };
+
   device = adapter.requestDevice(deviceDesc);
 
   std::cout << "Got device: " << device << std::endl;
@@ -185,13 +186,14 @@ bool Application::Initialize() {
 
   _InitializePipeline();
 
-  _PlayingWithBuffers();
+  _InitializeBuffers();
 
   return true;
 }
 
 void Application::Terminate() {
   // NOTE: Clean up
+  vertexBuffer.release();
   pipeline.release();
   surface.unconfigure();
   queue.release();
@@ -239,7 +241,11 @@ void Application::MainLoop() {
   RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
   renderPass.setPipeline(pipeline);
-  renderPass.draw(3, 1, 0, 0);
+
+  // NOTE: set vertex buffer while encoding render pass
+  renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexBuffer.getSize());
+
+  renderPass.draw(vertexCount, 1, 0, 0);
 
   // NOTE: use render pass
   renderPass.end();
@@ -322,8 +328,21 @@ void Application::_InitializePipeline() {
   RenderPipelineDescriptor pipelineDesc;
 
   // NOTE: Describe pipeline
-  pipelineDesc.vertex.bufferCount = 0;
-  pipelineDesc.vertex.buffers = nullptr;
+
+  VertexBufferLayout vertexBufferLayout;
+  VertexAttribute positionAttrib;
+
+  positionAttrib.shaderLocation = 0;
+  positionAttrib.format = VertexFormat::Float32x2;
+  positionAttrib.offset = 0;
+
+  vertexBufferLayout.attributeCount = 1;
+  vertexBufferLayout.attributes = &positionAttrib;
+  vertexBufferLayout.arrayStride = 2 * sizeof(float);
+  vertexBufferLayout.stepMode = VertexStepMode::Vertex;
+
+  pipelineDesc.vertex.bufferCount = 1;
+  pipelineDesc.vertex.buffers = &vertexBufferLayout;
 
   pipelineDesc.vertex.module = shaderModule;
   pipelineDesc.vertex.entryPoint = "vs_main";
@@ -377,71 +396,72 @@ void Application::_InitializePipeline() {
   shaderModule.release();
 }
 
-void Application::_PlayingWithBuffers() {
+void Application::_InitializeBuffers() {
 
-  // Experimentation for the "Playing with buffer" chapter
+  // NOTE: setup vertex buffer data
+  std::vector<float> vertexData = {
+      // xy0
+      -0.5,
+      -0.5,
+      // xy1
+      +0.5,
+      -0.5,
+      // xy2
+      +0.0,
+      +0.5,
+
+      // xy3
+      -0.55f,
+      -0.5,
+
+      // xy4
+      -0.05f,
+      +0.5,
+
+      // xy5
+      -0.55f,
+      +0.5,
+
+  };
+
+  vertexCount = static_cast<uint32_t>(vertexData.size() / 2);
+
   BufferDescriptor bufferDesc;
-  bufferDesc.label = "Some GPU-side data buffer";
-  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::CopySrc;
-  bufferDesc.size = 16;
+  bufferDesc.size = vertexData.size() * sizeof(float);
+  bufferDesc.usage =
+      BufferUsage::CopyDst | BufferUsage::Vertex; // Vertex usage here!
   bufferDesc.mappedAtCreation = false;
-  Buffer buffer1 = device.createBuffer(bufferDesc);
-  bufferDesc.label = "Output buffer";
-  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::MapRead;
-  Buffer buffer2 = device.createBuffer(bufferDesc);
+  vertexBuffer = device.createBuffer(bufferDesc);
 
-  // Create some CPU-side data buffer (of size 16 bytes)
-  std::vector<uint8_t> numbers(16);
-  for (uint8_t i = 0; i < 16; ++i)
-    numbers[i] = i;
-  // `numbers` now contains [ 0, 1, 2, ... ]
+  queue.writeBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
+}
 
-  // Copy this from `numbers` (RAM) to `buffer1` (VRAM)
-  queue.writeBuffer(buffer1, 0, numbers.data(), numbers.size());
+RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
+  SupportedLimits supportedLimits;
+  adapter.getLimits(&supportedLimits);
 
-  CommandEncoder encoder = device.createCommandEncoder(Default);
+  RequiredLimits requiredLimits = Default;
 
-  // After creating the command encoder
-  encoder.copyBufferToBuffer(buffer1, 0, buffer2, 0, 16);
+  // NOTE: only one vertex attribute for now
+  requiredLimits.limits.maxVertexAttributes = 1;
+  // NOTE: only one vertex buffer for now
+  requiredLimits.limits.maxVertexBuffers = 1;
+  // NOTE: max buffer size is 6 vertices of 2 float each
+  requiredLimits.limits.maxBufferSize = 6 * 2 * sizeof(float);
+  // NOTE: max stride between 2 consecutive vertices in the vertex buffer
+  requiredLimits.limits.maxVertexBufferArrayStride = 2 * sizeof(float);
 
-  CommandBuffer command = encoder.finish(Default);
-  encoder.release();
-  queue.submit(1, &command);
-  command.release();
+  // NOTE: safeguard minimum values for buffe offsets
+  requiredLimits.limits.minUniformBufferOffsetAlignment =
+      supportedLimits.limits.minUniformBufferOffsetAlignment;
+  requiredLimits.limits.minStorageBufferOffsetAlignment =
+      supportedLimits.limits.minStorageBufferOffsetAlignment;
 
-  struct Context {
-    bool ready;
-    Buffer buffer;
-  };
+  // Note forward max texture dimensions allowed
+  requiredLimits.limits.maxTextureDimension2D =
+      supportedLimits.limits.maxTextureDimension2D;
 
-  auto onBuffer2Mapped = [](WGPUBufferMapAsyncStatus status, void *pUserData) {
-    Context *context = reinterpret_cast<Context *>(pUserData);
-    context->ready = true;
-    std::cout << "Buffer 2 mapped with status " << status << std::endl;
-    if (status != BufferMapAsyncStatus::Success)
-      return;
-
-    uint8_t *bufferData = (uint8_t *)context->buffer.getConstMappedRange(0, 16);
-
-    context->buffer.unmap();
-
-    std::cout << "bufferData = [";
-    for (int i = 0; i < 16; ++i) {
-      if (i > 0)
-        std::cout << ", ";
-      std::cout << (int)bufferData[i];
-    }
-    std::cout << "]" << std::endl;
-  };
-
-  Context context = {false, buffer2};
-
-  wgpuBufferMapAsync(buffer2, MapMode::Read, 0, 16, onBuffer2Mapped,
-                     (void *)&context);
-
-  while (!context.ready) {
-    wgpuPollEvents(device, true /* yieldToBrowser */);
-  }
+  return requiredLimits;
 }
 
 int main(int, char **) {

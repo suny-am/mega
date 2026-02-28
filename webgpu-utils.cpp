@@ -11,24 +11,29 @@
 void inspectAdapter(Adapter adapter) {
 #ifndef __EMSCRIPTEN__
 
-  SupportedLimits supportedLimits = {};
+  SupportedLimits limits = {};
 
 #ifdef WEBGPU_BACKEND_DAWN
-  bool success = adapter.getLimits(&supportedLimits) = Status::Success;
+  bool success = adapter.getLimits(&limits) = Status::Success;
 #else
-  bool success = adapter.getLimits(&supportedLimits);
+  bool success = adapter.getLimits(&limits);
 #endif
 
   if (success) {
+    // NOTE: texture limits
     std::cout << "Adapter limits:" << std::endl;
     std::cout << " - maxTextureDimension1D: "
-              << supportedLimits.limits.maxTextureDimension1D << std::endl;
+              << limits.limits.maxTextureDimension1D << std::endl;
     std::cout << " - maxTextureDimension2D: "
-              << supportedLimits.limits.maxTextureDimension2D << std::endl;
+              << limits.limits.maxTextureDimension2D << std::endl;
     std::cout << " - maxTextureDimension3D: "
-              << supportedLimits.limits.maxTextureDimension3D << std::endl;
+              << limits.limits.maxTextureDimension3D << std::endl;
     std::cout << " - maxTextureArrayLayers: "
-              << supportedLimits.limits.maxTextureArrayLayers << std::endl;
+              << limits.limits.maxTextureArrayLayers << std::endl;
+
+    // NOTE: vertex limits
+    std::cout << " - maxVertexAttributes: " << limits.limits.maxVertexAttributes
+              << std::endl;
   }
 #endif
 
@@ -98,6 +103,9 @@ void inspectDevice(Device device) {
               << limits.limits.maxTextureDimension3D << std::endl;
     std::cout << " - maxTextureArrayLayers: "
               << limits.limits.maxTextureArrayLayers << std::endl;
-    // TODO: Extra device limits go here
+
+    // NOTE: vertex limits
+    std::cout << " - maxVertexAttributes: " << limits.limits.maxVertexAttributes
+              << std::endl;
   }
 }
