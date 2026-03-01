@@ -2,8 +2,6 @@
 
 #include <webgpu/webgpu.hpp>
 
-using namespace wgpu;
+void inspectAdapter(wgpu::Adapter adapter);
 
-void inspectAdapter(Adapter adapter);
-
-void inspectDevice(WGPUDevice device);
+void inspectDevice(wgpu::Device device);

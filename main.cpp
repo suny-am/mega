@@ -1,14 +1,5 @@
-// Include WebGPU header
-#include <cstddef>
-#include <cstdint>
-#include <sys/types.h>
-#include <unistd.h>
-#include <vector>
-#define WEBGPU_CPP_IMPLEMENTATION
-#include <webgpu/webgpu.hpp>
-
-#include "webgpu-utils.cpp"
 #include "webgpu-utils.h"
+#include <webgpu/webgpu.hpp>
 
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
@@ -19,36 +10,11 @@
 
 #include <cassert>
 #include <iostream>
+#include <vector>
+
+#include "ResourceManager.h"
 
 using namespace wgpu;
-
-const char *shaderSource = R"(
-    struct VertexInput {
-      @location(0) position: vec2f,
-      @location(1) color: vec3f,
-    }
-
-    struct VertexOutput {
-      @builtin(position) position: vec4f,
-      @location(0) color: vec3f,
-    }
-
-
-    @vertex
-    fn vs_main(in: VertexInput) -> VertexOutput {
-      var out: VertexOutput;
-      let ratio = 640.0 / 480.0;
-
-      out.position = vec4f(in.position.x, in.position.y * ratio, 0.0, 1.0);
-      out.color = in.color;
-      return out;
-    }
-
-    @fragment
-    fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-      return vec4f(in.color, 1.0);
-    }
-)";
 
 void wgpuPollEvents([[maybe_unused]] Device device,
                     [[maybe_unused]] bool yieldToWebBrowser) {
@@ -329,20 +295,17 @@ TextureView Application::_GetNextSurfaceViewData() {
 
 void Application::_InitializePipeline() {
   // NOTE: Create shader module
-  ShaderModuleDescriptor shaderDesc;
-#ifdef WEBGPU_BACKEND_WGPU
-  shaderDesc.hintCount = 0;
-  shaderDesc.hints = nullptr;
-#endif
 
-  ShaderModuleWGSLDescriptor shaderCodeDesc;
-  shaderCodeDesc.chain.next = nullptr;
-  shaderCodeDesc.chain.sType = SType::ShaderModuleWGSLDescriptor;
-  shaderDesc.nextInChain = &shaderCodeDesc.chain;
+  std::cout << "Creating shader module..." << std::endl;
+  ShaderModule shaderModule =
+      ResourceManager::LoadShaderModule(RESOURCE_DIR "/shader.wgsl", device);
+  std::cout << "Shader module: " << shaderModule << std::endl;
 
-  shaderCodeDesc.code = shaderSource;
-
-  ShaderModule shaderModule = device.createShaderModule(shaderDesc);
+  // Check for errors
+  if (shaderModule == nullptr) {
+    std::cerr << "Could not load shader!" << std::endl;
+    exit(1);
+  }
 
   // NOTE: Describe pipeline
   RenderPipelineDescriptor pipelineDesc;
@@ -427,18 +390,16 @@ void Application::_InitializePipeline() {
 void Application::_InitializeBuffers() {
 
   // NOTE: setup vertex buffer data
-  std::vector<float> pointData = {// x,   y,     r,   g,   b
-                                  -0.5, -0.5, 1.0, 0.0, 0.0,
+  std::vector<float> pointData;
+  std::vector<uint16_t> indexData;
 
-                                  +0.5, -0.5, 0.0, 1.0, 0.0,
+  bool success = ResourceManager::LoadGeometry(RESOURCE_DIR "/webgpu.txt",
+                                               pointData, indexData);
 
-                                  +0.5, +0.5, 0.0, 0.0, 1.0,
-
-                                  -0.5, +0.5, 1.0, 1.0, 0.0};
-
-  std::vector<uint16_t> indexData = {0, 1, 2,
-
-                                     0, 2, 3};
+  if (!success) {
+    std::cerr << "Could not load geometry" << std::endl;
+    exit(1);
+  }
 
   indexCount = static_cast<uint32_t>(indexData.size());
 
@@ -474,9 +435,9 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   requiredLimits.limits.maxVertexAttributes = 2;
   // NOTE: only one vertex buffer for now
   requiredLimits.limits.maxVertexBuffers = 1;
-  // NOTE: max buffer size is 6 vertices of 5 floats; 2 for position, 3 for
+  // NOTE: max buffer size is 15 vertices of 5 floats; 2 for position, 3 for
   // color
-  requiredLimits.limits.maxBufferSize = 6 * 5 * sizeof(float);
+  requiredLimits.limits.maxBufferSize = 15 * 5 * sizeof(float);
   // NOTE: max stride between 2 consecutive vertices in the vertex buffer is 5,
   // as each vertex carries 2 floats for position and 3 for color == 5
   requiredLimits.limits.maxVertexBufferArrayStride = 5 * sizeof(float);

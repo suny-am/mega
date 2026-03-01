@@ -8,6 +8,8 @@
 #include <emscripten.h>
 #endif // __EMSCRIPTEN__
 
+using namespace wgpu;
+
 void inspectAdapter(Adapter adapter) {
 #ifndef __EMSCRIPTEN__
 

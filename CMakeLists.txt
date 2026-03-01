@@ -17,8 +17,29 @@ endif()
 add_subdirectory(webgpu)
 add_subdirectory(glfw3webgpu)
 
-add_executable(App main.cpp)
+add_executable(App main.cpp
+  webgpu_impl.cpp
+  webgpu-utils.h
+  webgpu-utils.cpp
+  ResourceManager.h
+  ResourceManager.cpp)
 
+option(DEV_MODE "Set up development helper settings" ON)
+
+if(DEV_MODE)
+    # In dev mode, we load resources from the source tree, so that when we
+    # dynamically edit resources (like shaders), these are correctly
+    # versionned.
+    target_compile_definitions(App PRIVATE
+        RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
+    )
+else()
+    # In release mode, we just load resources relatively to wherever the
+    # executable is launched from, so that the binary is portable
+    target_compile_definitions(App PRIVATE
+        RESOURCE_DIR="./resources"
+    )
+endif()
 # Add the 'webgpu' target as a dependency of our App
 target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu)
 
