@@ -23,14 +23,28 @@
 using namespace wgpu;
 
 const char *shaderSource = R"(
+    struct VertexInput {
+      @location(0) position: vec2f,
+      @location(1) color: vec3f,
+    }
+
+    struct VertexOutput {
+      @builtin(position) position: vec4f,
+      @location(0) color: vec3f,
+    }
+
+
     @vertex
-    fn vs_main(@location(0) in_vertex_position: vec2f) -> @builtin(position) vec4f {
-        return vec4f(in_vertex_position, 0.0, 1.0);
+    fn vs_main(in: VertexInput) -> VertexOutput {
+      var out: VertexOutput;
+      out.position = vec4f(in.position, 0.0, 1.0);
+      out.color = in.color;
+      return out;
     }
 
     @fragment
-    fn fs_main() -> @location(0) vec4f {
-        return vec4f(0.0, 0.4, 1.0, 1.0);
+    fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+      return vec4f(in.color, 1.0);
     }
 )";
 
@@ -72,7 +86,8 @@ private:
   RenderPipeline pipeline;
   TextureFormat surfaceFormat = TextureFormat::Undefined;
 
-  Buffer vertexBuffer;
+  Buffer positionBuffer;
+  Buffer colorBuffer;
   uint32_t vertexCount;
 };
 
@@ -193,7 +208,8 @@ bool Application::Initialize() {
 
 void Application::Terminate() {
   // NOTE: Clean up
-  vertexBuffer.release();
+  positionBuffer.release();
+  colorBuffer.release();
   pipeline.release();
   surface.unconfigure();
   queue.release();
@@ -228,7 +244,7 @@ void Application::MainLoop() {
   renderPassColorAttachment.resolveTarget = nullptr;
   renderPassColorAttachment.loadOp = LoadOp::Clear;
   renderPassColorAttachment.storeOp = StoreOp::Store;
-  renderPassColorAttachment.clearValue = Color{0.9, 0.1, 0.2, 1.0};
+  renderPassColorAttachment.clearValue = Color{0.05, 0.05, 0.05, 1.0};
   // NOTE: WGPU-Native does not support depth slicing
 #ifndef WEBGPU_BACKEND_WGPU
   renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
@@ -243,7 +259,8 @@ void Application::MainLoop() {
   renderPass.setPipeline(pipeline);
 
   // NOTE: set vertex buffer while encoding render pass
-  renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexBuffer.getSize());
+  renderPass.setVertexBuffer(0, positionBuffer, 0, positionBuffer.getSize());
+  renderPass.setVertexBuffer(1, colorBuffer, 0, colorBuffer.getSize());
 
   renderPass.draw(vertexCount, 1, 0, 0);
 
@@ -329,20 +346,33 @@ void Application::_InitializePipeline() {
 
   // NOTE: Describe pipeline
 
-  VertexBufferLayout vertexBufferLayout;
-  VertexAttribute positionAttrib;
+  std::vector<VertexBufferLayout> vertexBufferLayouts(2);
 
+  // NOTE: describe position attribute
+  VertexAttribute positionAttrib;
   positionAttrib.shaderLocation = 0;
   positionAttrib.format = VertexFormat::Float32x2;
   positionAttrib.offset = 0;
 
-  vertexBufferLayout.attributeCount = 1;
-  vertexBufferLayout.attributes = &positionAttrib;
-  vertexBufferLayout.arrayStride = 2 * sizeof(float);
-  vertexBufferLayout.stepMode = VertexStepMode::Vertex;
+  vertexBufferLayouts[0].attributeCount = 1;
+  vertexBufferLayouts[0].attributes = &positionAttrib;
+  vertexBufferLayouts[0].arrayStride = 2 * sizeof(float);
+  vertexBufferLayouts[0].stepMode = VertexStepMode::Vertex;
 
-  pipelineDesc.vertex.bufferCount = 1;
-  pipelineDesc.vertex.buffers = &vertexBufferLayout;
+  // NOTE: describe color attribute
+  VertexAttribute colorAttrib;
+  colorAttrib.shaderLocation = 1;
+  colorAttrib.format = VertexFormat::Float32x3;
+  colorAttrib.offset = 0;
+
+  vertexBufferLayouts[1].attributeCount = 1;
+  vertexBufferLayouts[1].attributes = &colorAttrib;
+  vertexBufferLayouts[1].arrayStride = 3 * sizeof(float);
+  vertexBufferLayouts[1].stepMode = VertexStepMode::Vertex;
+
+  pipelineDesc.vertex.bufferCount =
+      static_cast<uint32_t>(vertexBufferLayouts.size());
+  pipelineDesc.vertex.buffers = vertexBufferLayouts.data();
 
   pipelineDesc.vertex.module = shaderModule;
   pipelineDesc.vertex.entryPoint = "vs_main";
@@ -399,41 +429,32 @@ void Application::_InitializePipeline() {
 void Application::_InitializeBuffers() {
 
   // NOTE: setup vertex buffer data
-  std::vector<float> vertexData = {
-      // xy0
-      -0.5,
-      -0.5,
-      // xy1
-      +0.5,
-      -0.5,
-      // xy2
-      +0.0,
-      +0.5,
+  std::vector<float> positionData = {-0.5,   -0.5, +0.5,   -0.5, +0.0,   +0.5,
+                                     -0.55f, -0.5, -0.05f, +0.5, -0.55f, +0.5};
 
-      // xy3
-      -0.55f,
-      -0.5,
+  std::vector<float> colorData = {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+                                  1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0};
 
-      // xy4
-      -0.05f,
-      +0.5,
+  vertexCount = static_cast<uint32_t>(positionData.size() / 2);
+  assert(vertexCount == static_cast<uint32_t>(colorData.size() / 3));
 
-      // xy5
-      -0.55f,
-      +0.5,
-
-  };
-
-  vertexCount = static_cast<uint32_t>(vertexData.size() / 2);
-
+  // NOTE: common buffer config
   BufferDescriptor bufferDesc;
-  bufferDesc.size = vertexData.size() * sizeof(float);
-  bufferDesc.usage =
-      BufferUsage::CopyDst | BufferUsage::Vertex; // Vertex usage here!
+  // NOTE: Vertex usage here!
+  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
   bufferDesc.mappedAtCreation = false;
-  vertexBuffer = device.createBuffer(bufferDesc);
 
-  queue.writeBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
+  // NOTE: position buffer
+  bufferDesc.label = "Vertex position";
+  bufferDesc.size = positionData.size() * sizeof(float);
+  positionBuffer = device.createBuffer(bufferDesc);
+  queue.writeBuffer(positionBuffer, 0, positionData.data(), bufferDesc.size);
+
+  // NOTE: color buffer
+  bufferDesc.label = "Vertex color";
+  bufferDesc.size = colorData.size() * sizeof(float);
+  colorBuffer = device.createBuffer(bufferDesc);
+  queue.writeBuffer(colorBuffer, 0, colorData.data(), bufferDesc.size);
 }
 
 RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
@@ -442,14 +463,14 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
 
   RequiredLimits requiredLimits = Default;
 
-  // NOTE: only one vertex attribute for now
-  requiredLimits.limits.maxVertexAttributes = 1;
+  // NOTE: only two vertex attributes for now
+  requiredLimits.limits.maxVertexAttributes = 2;
   // NOTE: only one vertex buffer for now
-  requiredLimits.limits.maxVertexBuffers = 1;
-  // NOTE: max buffer size is 6 vertices of 2 float each
-  requiredLimits.limits.maxBufferSize = 6 * 2 * sizeof(float);
+  requiredLimits.limits.maxVertexBuffers = 2;
+  // NOTE: max buffer size is 6 vertices of 3 float each (color data is vec3f)
+  requiredLimits.limits.maxBufferSize = 6 * 3 * sizeof(float);
   // NOTE: max stride between 2 consecutive vertices in the vertex buffer
-  requiredLimits.limits.maxVertexBufferArrayStride = 2 * sizeof(float);
+  requiredLimits.limits.maxVertexBufferArrayStride = 3 * sizeof(float);
 
   // NOTE: safeguard minimum values for buffe offsets
   requiredLimits.limits.minUniformBufferOffsetAlignment =
@@ -457,9 +478,13 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   requiredLimits.limits.minStorageBufferOffsetAlignment =
       supportedLimits.limits.minStorageBufferOffsetAlignment;
 
-  // Note forward max texture dimensions allowed
+  // NOTE: forward max texture dimensions allowed
   requiredLimits.limits.maxTextureDimension2D =
       supportedLimits.limits.maxTextureDimension2D;
+
+  // NOTE: allow max 3 floats forwarded from the vertex stage to the fragment
+  // stage in the shader pipeline
+  requiredLimits.limits.maxInterStageShaderComponents = 3;
 
   return requiredLimits;
 }
