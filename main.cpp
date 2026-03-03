@@ -1,4 +1,6 @@
 #include "webgpu-utils.h"
+#include <cstddef>
+#include <functional>
 #include <webgpu/webgpu.hpp>
 
 #include <GLFW/glfw3.h>
@@ -43,6 +45,7 @@ private:
   TextureView _GetNextSurfaceViewData();
   void _InitializePipeline();
   void _InitializeBuffers();
+  void _InitializeBindGroups();
   RequiredLimits _GetRequiredLimits(Adapter adapter) const;
 
 private:
@@ -53,9 +56,13 @@ private:
   std::unique_ptr<ErrorCallback> uncapturedErrorCallbackHandle;
   RenderPipeline pipeline;
   TextureFormat surfaceFormat = TextureFormat::Undefined;
+  PipelineLayout layout;
+  BindGroupLayout bindGroupLayout;
+  BindGroup bindGroup;
 
   Buffer pointBuffer;
   Buffer indexBuffer;
+  Buffer uniformBuffer;
   uint32_t indexCount;
 };
 
@@ -171,6 +178,8 @@ bool Application::Initialize() {
 
   _InitializeBuffers();
 
+  _InitializeBindGroups();
+
   return true;
 }
 
@@ -178,6 +187,10 @@ void Application::Terminate() {
   // NOTE: Clean up
   pointBuffer.release();
   indexBuffer.release();
+  uniformBuffer.release();
+  layout.release();
+  bindGroupLayout.release();
+  bindGroup.release();
   pipeline.release();
   surface.unconfigure();
   queue.release();
@@ -189,6 +202,10 @@ void Application::Terminate() {
 
 void Application::MainLoop() {
   glfwPollEvents();
+
+  // NOTE: update uniforms here
+  float t = static_cast<float>(glfwGetTime());
+  queue.writeBuffer(uniformBuffer, 0, &t, sizeof(float));
 
   // NOTE: Get the target view to present
   TextureView targetView = _GetNextSurfaceViewData();
@@ -230,6 +247,9 @@ void Application::MainLoop() {
   renderPass.setVertexBuffer(0, pointBuffer, 0, pointBuffer.getSize());
   renderPass.setIndexBuffer(indexBuffer, IndexFormat::Uint16, 0,
                             indexBuffer.getSize());
+
+  // NOTE: set bind group for render pass
+  renderPass.setBindGroup(0, bindGroup, 0, nullptr);
 
   renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
 
@@ -380,7 +400,24 @@ void Application::_InitializePipeline() {
   pipelineDesc.multisample.mask = ~0u;
   // NOTE: Default value as well (irrelevant for count = 1 anyways)
   pipelineDesc.multisample.alphaToCoverageEnabled = false;
-  pipelineDesc.layout = nullptr;
+
+  BindGroupLayoutEntry bindingLayout = Default;
+  bindingLayout.binding = 0;
+  bindingLayout.visibility = ShaderStage::Vertex;
+  bindingLayout.buffer.type = BufferBindingType::Uniform;
+  bindingLayout.buffer.minBindingSize = 4 * sizeof(float);
+
+  BindGroupLayoutDescriptor bindGroupLayoutDesc{};
+  bindGroupLayoutDesc.entryCount = 1;
+  bindGroupLayoutDesc.entries = &bindingLayout;
+  bindGroupLayout = device.createBindGroupLayout(bindGroupLayoutDesc);
+
+  PipelineLayoutDescriptor layoutDesc{};
+  layoutDesc.bindGroupLayoutCount = 1;
+  layoutDesc.bindGroupLayouts = (WGPUBindGroupLayout *)&bindGroupLayout;
+  layout = device.createPipelineLayout(layoutDesc);
+
+  pipelineDesc.layout = layout;
 
   pipeline = device.createRenderPipeline(pipelineDesc);
 
@@ -415,14 +452,38 @@ void Application::_InitializeBuffers() {
 
   queue.writeBuffer(pointBuffer, 0, pointData.data(), bufferDesc.size);
 
+  // NOTE: index buffer
   bufferDesc.label = "Vertex indices";
   bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Index;
   bufferDesc.size = indexData.size() * sizeof(uint16_t);
-  // round up to the next multiple of 4
+  // NOTE: round up to the next multiple of 4
   bufferDesc.size = (bufferDesc.size + 3) & ~3;
   indexBuffer = device.createBuffer(bufferDesc);
 
   queue.writeBuffer(indexBuffer, 0, indexData.data(), bufferDesc.size);
+
+  // NOTE: uniform buffer
+  bufferDesc.label = "Vertex uniforms";
+  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
+  bufferDesc.size = 4 * sizeof(float);
+  uniformBuffer = device.createBuffer(bufferDesc);
+
+  float currentTime = 1.0f;
+  queue.writeBuffer(uniformBuffer, 0, &currentTime, sizeof(float));
+}
+
+void Application::_InitializeBindGroups() {
+  BindGroupEntry binding{};
+  binding.binding = 0;
+  binding.buffer = uniformBuffer;
+  binding.offset = 0;
+  binding.size = 4 * sizeof(float);
+
+  BindGroupDescriptor bindGroupDesc{};
+  bindGroupDesc.layout = bindGroupLayout;
+  bindGroupDesc.entryCount = 1;
+  bindGroupDesc.entries = &binding;
+  bindGroup = device.createBindGroup(bindGroupDesc);
 }
 
 RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
@@ -455,6 +516,15 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   // NOTE: allow max 3 floats forwarded from the vertex stage to the fragment
   // stage in the shader pipeline
   requiredLimits.limits.maxInterStageShaderComponents = 3;
+
+  // NOTE: only one bind group for now
+  requiredLimits.limits.maxBindGroups = 1;
+
+  // NOTE: only one uniform buffer for now
+  requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
+
+  // NOTE: uniform structs have a size of max 16 floats (mor than we need)
+  requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4;
 
   return requiredLimits;
 }
