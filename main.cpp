@@ -1,6 +1,5 @@
 #include "webgpu-utils.h"
 #include <cstddef>
-#include <functional>
 #include <webgpu/webgpu.hpp>
 
 #include <GLFW/glfw3.h>
@@ -64,6 +63,13 @@ private:
   Buffer indexBuffer;
   Buffer uniformBuffer;
   uint32_t indexCount;
+
+  struct MyUniforms {
+    std::array<float, 4> color;
+    float time;
+    float _pad[3];
+  };
+  static_assert(sizeof(MyUniforms) % 16 == 0);
 };
 
 bool Application::Initialize() {
@@ -204,8 +210,9 @@ void Application::MainLoop() {
   glfwPollEvents();
 
   // NOTE: update uniforms here
-  float t = static_cast<float>(glfwGetTime());
-  queue.writeBuffer(uniformBuffer, 0, &t, sizeof(float));
+  float time = static_cast<float>(glfwGetTime());
+  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, time), &time,
+                    sizeof(float));
 
   // NOTE: Get the target view to present
   TextureView targetView = _GetNextSurfaceViewData();
@@ -292,6 +299,8 @@ TextureView Application::_GetNextSurfaceViewData() {
     return nullptr;
   }
 
+  Texture texture = surfaceTexture.texture;
+
   TextureViewDescriptor textureViewDesc = {};
   textureViewDesc.label = "Surface texture view";
   textureViewDesc.format = wgpuTextureGetFormat(surfaceTexture.texture);
@@ -301,8 +310,7 @@ TextureView Application::_GetNextSurfaceViewData() {
   textureViewDesc.baseArrayLayer = 0;
   textureViewDesc.arrayLayerCount = 1;
   textureViewDesc.aspect = TextureAspect::All;
-  TextureView targetView =
-      wgpuTextureCreateView(surfaceTexture.texture, &textureViewDesc);
+  TextureView targetView = texture.createView(textureViewDesc);
 
 #ifndef WEBGPU_BACKEND_WGPU
   // NOTE: for WGPU-Native, surface textures have to be released AFTER
@@ -403,9 +411,9 @@ void Application::_InitializePipeline() {
 
   BindGroupLayoutEntry bindingLayout = Default;
   bindingLayout.binding = 0;
-  bindingLayout.visibility = ShaderStage::Vertex;
+  bindingLayout.visibility = ShaderStage::Vertex | ShaderStage::Fragment;
   bindingLayout.buffer.type = BufferBindingType::Uniform;
-  bindingLayout.buffer.minBindingSize = 4 * sizeof(float);
+  bindingLayout.buffer.minBindingSize = sizeof(MyUniforms);
 
   BindGroupLayoutDescriptor bindGroupLayoutDesc{};
   bindGroupLayoutDesc.entryCount = 1;
@@ -465,11 +473,14 @@ void Application::_InitializeBuffers() {
   // NOTE: uniform buffer
   bufferDesc.label = "Vertex uniforms";
   bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
-  bufferDesc.size = 4 * sizeof(float);
+  bufferDesc.size = sizeof(MyUniforms);
   uniformBuffer = device.createBuffer(bufferDesc);
 
-  float currentTime = 1.0f;
-  queue.writeBuffer(uniformBuffer, 0, &currentTime, sizeof(float));
+  MyUniforms uniforms;
+  uniforms.time = 1.0f;
+  uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
+
+  queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
 }
 
 void Application::_InitializeBindGroups() {
@@ -477,7 +488,7 @@ void Application::_InitializeBindGroups() {
   binding.binding = 0;
   binding.buffer = uniformBuffer;
   binding.offset = 0;
-  binding.size = 4 * sizeof(float);
+  binding.size = sizeof(MyUniforms);
 
   BindGroupDescriptor bindGroupDesc{};
   bindGroupDesc.layout = bindGroupLayout;
@@ -537,7 +548,7 @@ int main(int, char **) {
     return 1;
   }
 
-#ifdef __EMSCRIPTEN
+#ifdef __EMSCRIPTEN__
   // Emscripten main loop
   auto callback = [](void *arg)
 }
@@ -548,7 +559,7 @@ emscripten_set_main_loop_arg(callback, &app, 0, true);
   while (app.isRunning()) {
     app.MainLoop();
   }
-#endif //  __EMSCRIPTEN
+#endif //  __EMSCRIPTEN__
 
 app.Terminate();
 
