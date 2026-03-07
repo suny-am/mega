@@ -2,6 +2,8 @@
 
 #include <webgpu/webgpu.hpp>
 
-void inspectAdapter(wgpu::Adapter adapter);
+void InspectAdapter(wgpu::Adapter adapter);
 
-void inspectDevice(wgpu::Device device);
+void InspectDevice(wgpu::Device device);
+
+uint32_t CeilToNextMultiple(uint32_t value, uint32_t step);

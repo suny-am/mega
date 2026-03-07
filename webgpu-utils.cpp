@@ -10,7 +10,7 @@
 
 using namespace wgpu;
 
-void inspectAdapter(Adapter adapter) {
+void InspectAdapter(Adapter adapter) {
 #ifndef __EMSCRIPTEN__
 
   SupportedLimits limits = {};
@@ -74,7 +74,7 @@ void inspectAdapter(Adapter adapter) {
   std::cout << std::dec; // Restore decimal numbers
 }
 
-void inspectDevice(Device device) {
+void InspectDevice(Device device) {
   size_t featureCount = device.enumerateFeatures(nullptr);
   std::vector<FeatureName> features(featureCount, FeatureName::Undefined);
   device.enumerateFeatures(features.data());
@@ -110,4 +110,9 @@ void inspectDevice(Device device) {
     std::cout << " - maxVertexAttributes: " << limits.limits.maxVertexAttributes
               << std::endl;
   }
+}
+
+uint32_t CeilToNextMultiple(uint32_t value, uint32_t step) {
+  uint32_t divide_and_ceil = value / step + (value % step == 0 ? 0 : 1);
+  return step * divide_and_ceil;
 }

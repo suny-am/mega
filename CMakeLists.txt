@@ -19,10 +19,12 @@ add_subdirectory(glfw3webgpu)
 
 add_executable(App main.cpp
   webgpu_impl.cpp
-  webgpu-utils.h
-  webgpu-utils.cpp
+  Application.h
+  Application.cpp
   ResourceManager.h
-  ResourceManager.cpp)
+  ResourceManager.cpp
+  webgpu-utils.h
+  webgpu-utils.cpp)
 
 option(DEV_MODE "Set up development helper settings" ON)
 
