@@ -2,9 +2,7 @@
 #include "ResourceManager.h"
 #include "webgpu-utils.h"
 #include <GLFW/glfw3.h>
-#include <cstdint>
 #include <glfw3webgpu.h>
-#include <webgpu/webgpu.hpp>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -165,7 +163,7 @@ void Application::MainLoop() {
   // NOTE: update uniforms here
   float time = static_cast<float>(glfwGetTime());
   queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, time), &time,
-                    sizeof(MyUniforms::time));
+                    sizeof(float));
 
   // NOTE: Get the target view to present
   TextureView targetView = _GetNextSurfaceViewData();
@@ -198,24 +196,22 @@ void Application::MainLoop() {
   renderPassDesc.depthStencilAttachment = nullptr;
   renderPassDesc.timestampWrites = nullptr;
 
+  // NOTE: Create the render pass encoder
   RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
   renderPass.setPipeline(pipeline);
 
+  // NOTE: set vertex buffer while encoding render pass
   renderPass.setVertexBuffer(0, pointBuffer, 0, pointBuffer.getSize());
   renderPass.setIndexBuffer(indexBuffer, IndexFormat::Uint16, 0,
                             indexBuffer.getSize());
 
-  uint32_t dynamicOffset = 0;
+  // NOTE: set bind group for render pass
+  renderPass.setBindGroup(0, bindGroup, 0, nullptr);
 
-  dynamicOffset = 0 * uniformStride;
-  renderPass.setBindGroup(0, bindGroup, 1, &dynamicOffset);
   renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
 
-  dynamicOffset = 1 * uniformStride;
-  renderPass.setBindGroup(0, bindGroup, 1, &dynamicOffset);
-  renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
-
+  // NOTE: use render pass
   renderPass.end();
   renderPass.release();
 
@@ -298,19 +294,19 @@ void Application::_InitializePipeline() {
   // NOTE: describe position attribute
   std::vector<VertexAttribute> vertexAttribs(2);
   vertexAttribs[0].shaderLocation = 0;
-  vertexAttribs[0].format = VertexFormat::Float32x2;
+  vertexAttribs[0].format = VertexFormat::Float32x3;
   vertexAttribs[0].offset = 0;
 
   // NOTE: describe color attribute
   VertexAttribute colorAttrib;
   vertexAttribs[1].shaderLocation = 1;
   vertexAttribs[1].format = VertexFormat::Float32x3;
-  vertexAttribs[1].offset = 2 * sizeof(float);
+  vertexAttribs[1].offset = 3 * sizeof(float);
 
   vertexBufferLayout.attributeCount =
       static_cast<uint32_t>(vertexAttribs.size());
   vertexBufferLayout.attributes = vertexAttribs.data();
-  vertexBufferLayout.arrayStride = 5 * sizeof(float);
+  vertexBufferLayout.arrayStride = 6 * sizeof(float);
   vertexBufferLayout.stepMode = VertexStepMode::Vertex;
 
   pipelineDesc.vertex.bufferCount = 1;
@@ -367,7 +363,6 @@ void Application::_InitializePipeline() {
   bindingLayout.visibility = ShaderStage::Vertex | ShaderStage::Fragment;
   bindingLayout.buffer.type = BufferBindingType::Uniform;
   bindingLayout.buffer.minBindingSize = sizeof(MyUniforms);
-  bindingLayout.buffer.hasDynamicOffset = true;
 
   BindGroupLayoutDescriptor bindGroupLayoutDesc{};
   bindGroupLayoutDesc.entryCount = 1;
@@ -406,8 +401,8 @@ void Application::_InitializeBuffers() {
   std::vector<float> pointData;
   std::vector<uint16_t> indexData;
 
-  bool success = ResourceManager::LoadGeometry(RESOURCE_DIR "/webgpu.txt",
-                                               pointData, indexData);
+  bool success = ResourceManager::LoadGeometry(RESOURCE_DIR "/pyramid.txt",
+                                               pointData, indexData, 3);
 
   if (!success) {
     std::cerr << "Could not load geometry" << std::endl;
@@ -416,9 +411,11 @@ void Application::_InitializeBuffers() {
 
   indexCount = static_cast<uint32_t>(indexData.size());
 
+  // NOTE: common buffer config
   BufferDescriptor bufferDesc;
   bufferDesc.mappedAtCreation = false;
 
+  // NOTE: position buffer
   bufferDesc.label = "Vertex position";
   bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
   bufferDesc.size = pointData.size() * sizeof(float);
@@ -426,37 +423,27 @@ void Application::_InitializeBuffers() {
 
   queue.writeBuffer(pointBuffer, 0, pointData.data(), bufferDesc.size);
 
+  // NOTE: index buffer
   bufferDesc.label = "Vertex indices";
   bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Index;
   bufferDesc.size = indexData.size() * sizeof(uint16_t);
+  // NOTE: round up to the next multiple of 4
   bufferDesc.size = (bufferDesc.size + 3) & ~3;
   indexBuffer = device.createBuffer(bufferDesc);
 
   queue.writeBuffer(indexBuffer, 0, indexData.data(), bufferDesc.size);
 
-  SupportedLimits supportedLimits;
-  device.getLimits(&supportedLimits);
-  Limits deviceLimits = supportedLimits.limits;
-
-  uniformStride = CeilToNextMultiple(
-      (uint32_t)sizeof(MyUniforms),
-      (uint32_t)deviceLimits.minUniformBufferOffsetAlignment);
-
+  // NOTE: uniform buffer
   bufferDesc.label = "Vertex uniforms";
   bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
-  bufferDesc.size = uniformStride + sizeof(MyUniforms);
+  bufferDesc.size = sizeof(MyUniforms);
   uniformBuffer = device.createBuffer(bufferDesc);
 
   MyUniforms uniforms;
-
   uniforms.time = 1.0f;
   uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
-  queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
 
-  uniforms.time = -1.0f;
-  uniforms.color = {1.0f, 1.0f, 1.0f, 0.7f};
-  queue.writeBuffer(uniformBuffer, uniformStride, &uniforms,
-                    sizeof(MyUniforms));
+  queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
 }
 
 RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
@@ -468,7 +455,7 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   requiredLimits.limits.maxVertexAttributes = 2;
   requiredLimits.limits.maxVertexBuffers = 1;
   requiredLimits.limits.maxBufferSize = 15 * 5 * sizeof(float);
-  requiredLimits.limits.maxVertexBufferArrayStride = 5 * sizeof(float);
+  requiredLimits.limits.maxVertexBufferArrayStride = 6 * sizeof(float);
   requiredLimits.limits.minUniformBufferOffsetAlignment =
       supportedLimits.limits.minUniformBufferOffsetAlignment;
   requiredLimits.limits.minStorageBufferOffsetAlignment =
@@ -479,7 +466,6 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   requiredLimits.limits.maxBindGroups = 1;
   requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
   requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4;
-  requiredLimits.limits.maxDynamicUniformBuffersPerPipelineLayout = 1;
 
   return requiredLimits;
 }
