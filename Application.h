@@ -1,7 +1,9 @@
 #pragma once
 
 #include "glfw/include/GLFW/glfw3.h"
+#include <cstdint>
 #include <memory>
+#include <sys/types.h>
 #include <webgpu/webgpu.hpp>
 
 class Application {
@@ -37,6 +39,7 @@ private:
   wgpu::Buffer indexBuffer;
   wgpu::Buffer uniformBuffer;
   uint32_t indexCount;
+  uint32_t uniformStride;
 
   struct MyUniforms {
     std::array<float, 4> color;
