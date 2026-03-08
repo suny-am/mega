@@ -3,6 +3,7 @@
 #include "webgpu-utils.h"
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
+#include <webgpu/webgpu.hpp>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -137,6 +138,8 @@ bool Application::Initialize() {
 
   _InitializeBindGroups();
 
+  _InitializeDepthStencil();
+
   return true;
 }
 
@@ -150,6 +153,7 @@ void Application::Terminate() {
   bindGroup.release();
   pipeline.release();
   surface.unconfigure();
+  depthTextureView.release();
   queue.release();
   surface.release();
   device.release();
@@ -193,7 +197,26 @@ void Application::MainLoop() {
   renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
 #endif // !WEBGPU_BACKEND_WGPU
 
-  renderPassDesc.depthStencilAttachment = nullptr;
+  RenderPassDepthStencilAttachment depthStencilAttachment;
+  depthStencilAttachment.view = depthTextureView;
+  depthStencilAttachment.depthClearValue = 1.0f;
+  depthStencilAttachment.depthLoadOp = LoadOp::Clear;
+  depthStencilAttachment.depthStoreOp = StoreOp::Store;
+  depthStencilAttachment.depthReadOnly = false;
+  depthStencilAttachment.stencilClearValue = 0;
+  depthStencilAttachment.stencilLoadOp = LoadOp::Clear;
+  depthStencilAttachment.stencilStoreOp = StoreOp::Store;
+  depthStencilAttachment.stencilReadOnly = true;
+
+#ifdef WEBGPU_BACKEND_DAWN
+  depthStencilAttachment.stencilLoadOp = LoadOp::Undefined;
+  depthStencilAttachment.stencilStoreOp = StoreOp::Undefined;
+  constexpr auto NaNf = std::vnumeric_limits<float>::quiet_NaN();
+  depthStencilAttachment.clearDepth = NaNf;
+#endif
+
+  renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
+
   renderPassDesc.timestampWrites = nullptr;
 
   // NOTE: Create the render pass encoder
@@ -270,6 +293,29 @@ TextureView Application::_GetNextSurfaceViewData() {
   return targetView;
 }
 
+void Application::_InitializeDepthStencil() {
+  TextureDescriptor depthTextureDesc;
+  depthTextureDesc.dimension = TextureDimension::_2D;
+  depthTextureDesc.format = depthTextureFormat;
+  depthTextureDesc.mipLevelCount = 1;
+  depthTextureDesc.sampleCount = 1;
+  depthTextureDesc.size = {640, 480, 1};
+  depthTextureDesc.usage = TextureUsage::RenderAttachment;
+  depthTextureDesc.viewFormatCount = 1;
+  depthTextureDesc.viewFormats = (WGPUTextureFormat *)&depthTextureFormat;
+  depthTexture = device.createTexture(depthTextureDesc);
+
+  TextureViewDescriptor depthTextureViewDesc;
+  depthTextureViewDesc.aspect = TextureAspect::DepthOnly;
+  depthTextureViewDesc.baseArrayLayer = 0;
+  depthTextureViewDesc.arrayLayerCount = 1;
+  depthTextureViewDesc.baseMipLevel = 0;
+  depthTextureViewDesc.mipLevelCount = 1;
+  depthTextureViewDesc.dimension = TextureViewDimension::_2D;
+  depthTextureViewDesc.format = depthTextureFormat;
+  depthTextureView = depthTexture.createView(depthTextureViewDesc);
+}
+
 void Application::_InitializePipeline() {
   // NOTE: Create shader module
 
@@ -330,8 +376,18 @@ void Application::_InitializePipeline() {
   fragmentState.constantCount = 0;
   fragmentState.constants = nullptr;
 
-  // NOTE: we do not use stencil/depth testing for now
-  pipelineDesc.depthStencil = nullptr;
+  DepthStencilState depthStencilState = Default;
+  depthStencilState.depthCompare = CompareFunction::Less;
+  // NOTE: it is good to disable the depth writing for transparent objects and
+  // UI elements
+  depthStencilState.depthWriteEnabled = true;
+  depthTextureFormat = TextureFormat::Depth24Plus;
+  depthStencilState.format = depthTextureFormat;
+  // NOTE: deactivate stencil
+  depthStencilState.stencilReadMask = 0;
+  depthStencilState.stencilWriteMask = 0;
+
+  pipelineDesc.depthStencil = &depthStencilState;
 
   BlendState blendState;
   blendState.color.srcFactor = BlendFactor::SrcAlpha;
@@ -466,6 +522,9 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   requiredLimits.limits.maxBindGroups = 1;
   requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
   requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4;
+  requiredLimits.limits.maxTextureDimension1D = 480;
+  requiredLimits.limits.maxTextureDimension2D = 640;
+  requiredLimits.limits.maxTextureArrayLayers = 1;
 
   return requiredLimits;
 }
