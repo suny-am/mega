@@ -30,6 +30,11 @@ option(DEV_MODE "Set up development helper settings" ON)
 
 target_include_directories(App PRIVATE .)
 
+target_compile_definitions(App PRIVATE
+  GLM_FORCE_DEPTH_ZERO_TO_ONE
+  GLM_FORCE_LEFT_HANDED
+)
+
 if(DEV_MODE)
     # In dev mode, we load resources from the source tree, so that when we
     # dynamically edit resources (like shaders), these are correctly

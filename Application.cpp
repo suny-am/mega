@@ -1,12 +1,10 @@
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_FORCE_LEFT_HANDED
-
 #include "Application.h"
 #include "ResourceManager.h"
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float3.hpp"
 #include "webgpu-utils.h"
 #include <GLFW/glfw3.h>
+#include <cstddef>
 #include <glfw3webgpu.h>
 #include <webgpu/webgpu.hpp>
 
@@ -355,25 +353,31 @@ void Application::_InitializePipeline() {
   RenderPipelineDescriptor pipelineDesc;
 
   // NOTE: Describe pipeline
-
   VertexBufferLayout vertexBufferLayout;
 
+  // NOTE: 3 attributes: position, normal and color
+  std::vector<VertexAttribute> vertexAttribs(3);
+
   // NOTE: describe position attribute
-  std::vector<VertexAttribute> vertexAttribs(2);
   vertexAttribs[0].shaderLocation = 0;
   vertexAttribs[0].format = VertexFormat::Float32x3;
-  vertexAttribs[0].offset = 0;
+  vertexAttribs[0].offset = offsetof(VertexAttributes, position);
+
+  // NOTE: describe normal attribute
+  vertexAttribs[1].shaderLocation = 1;
+  vertexAttribs[1].format = VertexFormat::Float32x3;
+  vertexAttribs[1].offset = offsetof(VertexAttributes, normal);
 
   // NOTE: describe color attribute
   VertexAttribute colorAttrib;
-  vertexAttribs[1].shaderLocation = 1;
-  vertexAttribs[1].format = VertexFormat::Float32x3;
-  vertexAttribs[1].offset = 3 * sizeof(float);
+  vertexAttribs[2].shaderLocation = 2;
+  vertexAttribs[2].format = VertexFormat::Float32x3;
+  vertexAttribs[2].offset = offsetof(VertexAttributes, color);
 
   vertexBufferLayout.attributeCount =
       static_cast<uint32_t>(vertexAttribs.size());
   vertexBufferLayout.attributes = vertexAttribs.data();
-  vertexBufferLayout.arrayStride = 6 * sizeof(float);
+  vertexBufferLayout.arrayStride = sizeof(VertexAttributes);
   vertexBufferLayout.stepMode = VertexStepMode::Vertex;
 
   pipelineDesc.vertex.bufferCount = 1;
@@ -478,8 +482,9 @@ void Application::_InitializeBuffers() {
   std::vector<float> pointData;
   std::vector<uint16_t> indexData;
 
-  bool success = ResourceManager::LoadGeometry(RESOURCE_DIR "/pyramid.txt",
-                                               pointData, indexData, 3);
+  bool success = ResourceManager::LoadGeometry(
+      RESOURCE_DIR "/pyramid.txt", pointData, indexData,
+      6); // 3 dimensions + normals per dimension
 
   if (!success) {
     std::cerr << "Could not load geometry" << std::endl;
@@ -549,17 +554,18 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
 
   RequiredLimits requiredLimits = Default;
 
-  requiredLimits.limits.maxVertexAttributes = 2;
+  requiredLimits.limits.maxVertexAttributes = 3;
   requiredLimits.limits.maxVertexBuffers = 1;
-  requiredLimits.limits.maxBufferSize = 15 * 5 * sizeof(float);
-  requiredLimits.limits.maxVertexBufferArrayStride = 6 * sizeof(float);
+  requiredLimits.limits.maxBufferSize = 16 * sizeof(VertexAttributes);
+  requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
   requiredLimits.limits.minUniformBufferOffsetAlignment =
       supportedLimits.limits.minUniformBufferOffsetAlignment;
   requiredLimits.limits.minStorageBufferOffsetAlignment =
       supportedLimits.limits.minStorageBufferOffsetAlignment;
   requiredLimits.limits.maxTextureDimension2D =
       supportedLimits.limits.maxTextureDimension2D;
-  requiredLimits.limits.maxInterStageShaderComponents = 3;
+  requiredLimits.limits.maxInterStageShaderComponents =
+      6; // NOTE: color.rbg + normal.xyz
   requiredLimits.limits.maxBindGroups = 1;
   requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
   requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);

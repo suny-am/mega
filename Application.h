@@ -52,4 +52,10 @@ private:
     float time;
     float _pad[3];
   } uniforms;
+
+  struct VertexAttributes {
+    glm::vec3 position;
+    glm::vec3 normal;
+    glm::vec3 color;
+  };
 };
