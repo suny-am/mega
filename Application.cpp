@@ -151,8 +151,7 @@ bool Application::Initialize() {
 
 void Application::Terminate() {
   // NOTE: Clean up
-  pointBuffer.release();
-  indexBuffer.release();
+  vertexBuffer.release();
   uniformBuffer.release();
   layout.release();
   bindGroupLayout.release();
@@ -180,7 +179,7 @@ void Application::MainLoop() {
   // NOTE: update uniforms here
   float angle1 = uniforms.time;
   mat4x4 S = scale(mat4x4(1.0), vec3(0.3f));
-  mat4x4 T1 = translate(mat4x4(1.0), vec3(0.5, 0.0, 0.0));
+  mat4x4 T1 = translate(mat4x4(1.0), vec3(0.0, 0.0, 0.0));
   mat4x4 R1 = rotate(mat4x4(1.0), angle1, vec3(0.0, 0.0, 1.0));
 
   uniforms.modelMatrix = R1 * T1 * S;
@@ -244,14 +243,12 @@ void Application::MainLoop() {
   renderPass.setPipeline(pipeline);
 
   // NOTE: set vertex buffer while encoding render pass
-  renderPass.setVertexBuffer(0, pointBuffer, 0, pointBuffer.getSize());
-  renderPass.setIndexBuffer(indexBuffer, IndexFormat::Uint16, 0,
-                            indexBuffer.getSize());
+  renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexBuffer.getSize());
 
   // NOTE: set bind group for render pass
   renderPass.setBindGroup(0, bindGroup, 0, nullptr);
 
-  renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
+  renderPass.draw(indexCount, 1, 0, 0);
 
   // NOTE: use render pass
   renderPass.end();
@@ -480,40 +477,29 @@ void Application::_InitializeBuffers() {
 
   // NOTE: setup vertex buffer data
   std::vector<float> pointData;
-  std::vector<uint16_t> indexData;
 
-  bool success = ResourceManager::LoadGeometry(
-      RESOURCE_DIR "/pyramid.txt", pointData, indexData,
-      6); // 3 dimensions + normals per dimension
+  std::vector<VertexAttributes> vertexData;
+  bool success = ResourceManager::LoadGeometryFromObj(
+      RESOURCE_DIR "/mammoth.obj", vertexData);
 
   if (!success) {
     std::cerr << "Could not load geometry" << std::endl;
     exit(1);
   }
 
-  indexCount = static_cast<uint32_t>(indexData.size());
+  indexCount = static_cast<int>(vertexData.size());
 
   // NOTE: common buffer config
   BufferDescriptor bufferDesc;
   bufferDesc.mappedAtCreation = false;
 
   // NOTE: position buffer
-  bufferDesc.label = "Vertex position";
+  bufferDesc.label = "Vertex buffer";
   bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
-  bufferDesc.size = pointData.size() * sizeof(float);
-  pointBuffer = device.createBuffer(bufferDesc);
+  bufferDesc.size = vertexData.size() * sizeof(VertexAttributes);
+  vertexBuffer = device.createBuffer(bufferDesc);
 
-  queue.writeBuffer(pointBuffer, 0, pointData.data(), bufferDesc.size);
-
-  // NOTE: index buffer
-  bufferDesc.label = "Vertex indices";
-  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Index;
-  bufferDesc.size = indexData.size() * sizeof(uint16_t);
-  // NOTE: round up to the next multiple of 4
-  bufferDesc.size = (bufferDesc.size + 3) & ~3;
-  indexBuffer = device.createBuffer(bufferDesc);
-
-  queue.writeBuffer(indexBuffer, 0, indexData.data(), bufferDesc.size);
+  queue.writeBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
 
   // NOTE: uniform buffer
   bufferDesc.label = "Vertex uniforms";
@@ -522,17 +508,17 @@ void Application::_InitializeBuffers() {
   uniformBuffer = device.createBuffer(bufferDesc);
 
   // NOTE: update uniforms here
-  float angle1 = 2.0f;
-  float angle2 = 3.0 * PI / 4.0;
+  float angle1 = 2.5f;
+  float angle2 = 2.5 * PI / 4.0;
   float focalLength = 2.0f;
-  vec3 focalPoint(0.0, 0.0, -2.0);
+  vec3 focalPoint(0.0, 0.0, -1.0);
   float near = 0.1f;
   float far = 100.0f;
   float ratio = 640.0f / 480.0f;
   float fov = 2 * atan(1 / focalLength);
 
   mat4x4 S = scale(mat4x4(1.0), vec3(0.3f));
-  mat4x4 T1 = translate(mat4x4(1.0), vec3(0.5, 0.0, 0.0));
+  mat4x4 T1 = mat4x4(1.0);
   mat4x4 R1 = rotate(mat4x4(1.0), angle1, vec3(0.0, 0.0, 1.0));
   uniforms.modelMatrix = R1 * T1 * S;
 
@@ -556,7 +542,8 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
 
   requiredLimits.limits.maxVertexAttributes = 3;
   requiredLimits.limits.maxVertexBuffers = 1;
-  requiredLimits.limits.maxBufferSize = 16 * sizeof(VertexAttributes);
+  requiredLimits.limits.maxBufferSize =
+      1000000 * sizeof(VertexAttributes); // NOTE: allow 10000 vertices
   requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
   requiredLimits.limits.minUniformBufferOffsetAlignment =
       supportedLimits.limits.minUniformBufferOffsetAlignment;

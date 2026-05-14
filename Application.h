@@ -16,6 +16,13 @@ public:
 
   bool isRunning();
 
+public:
+  struct VertexAttributes {
+    glm::vec3 position;
+    glm::vec3 normal;
+    glm::vec3 color;
+  };
+
 private:
   wgpu::TextureView _GetNextSurfaceViewData();
   void _InitializePipeline();
@@ -39,8 +46,7 @@ private:
   wgpu::BindGroupLayout bindGroupLayout;
   wgpu::BindGroup bindGroup;
 
-  wgpu::Buffer pointBuffer;
-  wgpu::Buffer indexBuffer;
+  wgpu::Buffer vertexBuffer;
   wgpu::Buffer uniformBuffer;
   uint32_t indexCount;
 
@@ -52,10 +58,4 @@ private:
     float time;
     float _pad[3];
   } uniforms;
-
-  struct VertexAttributes {
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec3 color;
-  };
 };
