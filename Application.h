@@ -1,6 +1,8 @@
 #pragma once
 
 #include "glfw/include/GLFW/glfw3.h"
+#include <glm/ext.hpp>
+#include <glm/glm.hpp>
 #include <memory>
 #include <webgpu/webgpu.hpp>
 
@@ -43,8 +45,11 @@ private:
   uint32_t indexCount;
 
   struct MyUniforms {
-    std::array<float, 4> color;
+    glm::mat4x4 projectionMatrix;
+    glm::mat4x4 viewMatrix;
+    glm::mat4x4 modelMatrix;
+    glm::vec4 color;
     float time;
     float _pad[3];
-  };
+  } uniforms;
 };

@@ -1,5 +1,10 @@
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_LEFT_HANDED
+
 #include "Application.h"
 #include "ResourceManager.h"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/vector_float3.hpp"
 #include "webgpu-utils.h"
 #include <GLFW/glfw3.h>
 #include <glfw3webgpu.h>
@@ -10,6 +15,9 @@
 #endif // __EMSCRIPTEN__
 
 using namespace wgpu;
+using namespace glm;
+
+constexpr float PI = 3.14159265358979323846f;
 
 void wgpuPollEvents([[maybe_unused]] Device device,
                     [[maybe_unused]] bool yieldToWebBrowser) {
@@ -164,10 +172,23 @@ void Application::Terminate() {
 void Application::MainLoop() {
   glfwPollEvents();
 
+  // Update uniform buffer
+  uniforms.time =
+      static_cast<float>(glfwGetTime()); // glfwGetTime returns a double
+  // Only update the 1-st float of the buffer
+  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, time), &uniforms.time,
+                    sizeof(MyUniforms::time));
+
   // NOTE: update uniforms here
-  float time = static_cast<float>(glfwGetTime());
-  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, time), &time,
-                    sizeof(float));
+  float angle1 = uniforms.time;
+  mat4x4 S = scale(mat4x4(1.0), vec3(0.3f));
+  mat4x4 T1 = translate(mat4x4(1.0), vec3(0.5, 0.0, 0.0));
+  mat4x4 R1 = rotate(mat4x4(1.0), angle1, vec3(0.0, 0.0, 1.0));
+
+  uniforms.modelMatrix = R1 * T1 * S;
+
+  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, modelMatrix),
+                    &uniforms.modelMatrix, sizeof(MyUniforms::modelMatrix));
 
   // NOTE: Get the target view to present
   TextureView targetView = _GetNextSurfaceViewData();
@@ -495,7 +516,27 @@ void Application::_InitializeBuffers() {
   bufferDesc.size = sizeof(MyUniforms);
   uniformBuffer = device.createBuffer(bufferDesc);
 
-  MyUniforms uniforms;
+  // NOTE: update uniforms here
+  float angle1 = 2.0f;
+  float angle2 = 3.0 * PI / 4.0;
+  float focalLength = 2.0f;
+  vec3 focalPoint(0.0, 0.0, -2.0);
+  float near = 0.1f;
+  float far = 100.0f;
+  float ratio = 640.0f / 480.0f;
+  float fov = 2 * atan(1 / focalLength);
+
+  mat4x4 S = scale(mat4x4(1.0), vec3(0.3f));
+  mat4x4 T1 = translate(mat4x4(1.0), vec3(0.5, 0.0, 0.0));
+  mat4x4 R1 = rotate(mat4x4(1.0), angle1, vec3(0.0, 0.0, 1.0));
+  uniforms.modelMatrix = R1 * T1 * S;
+
+  mat4x4 R2 = rotate(mat4x4(1.0), -angle2, vec3(1.0, 0.0, 0.0));
+  mat4x4 T2 = translate(mat4x4(1.0), -focalPoint);
+  uniforms.viewMatrix = T2 * R2;
+
+  uniforms.projectionMatrix = perspective(fov, ratio, near, far);
+
   uniforms.time = 1.0f;
   uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
 
@@ -521,7 +562,7 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   requiredLimits.limits.maxInterStageShaderComponents = 3;
   requiredLimits.limits.maxBindGroups = 1;
   requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
-  requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4;
+  requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
   requiredLimits.limits.maxTextureDimension1D = 480;
   requiredLimits.limits.maxTextureDimension2D = 640;
   requiredLimits.limits.maxTextureArrayLayers = 1;

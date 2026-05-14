@@ -28,6 +28,8 @@ add_executable(App main.cpp
 
 option(DEV_MODE "Set up development helper settings" ON)
 
+target_include_directories(App PRIVATE .)
+
 if(DEV_MODE)
     # In dev mode, we load resources from the source tree, so that when we
     # dynamically edit resources (like shaders), these are correctly
