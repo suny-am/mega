@@ -479,8 +479,8 @@ void Application::_InitializeBuffers() {
   std::vector<float> pointData;
 
   std::vector<VertexAttributes> vertexData;
-  bool success = ResourceManager::LoadGeometryFromObj(
-      RESOURCE_DIR "/mammoth.obj", vertexData);
+  bool success = ResourceManager::LoadGeometryFromObj(RESOURCE_DIR "/mech.obj",
+                                                      vertexData);
 
   if (!success) {
     std::cerr << "Could not load geometry" << std::endl;
