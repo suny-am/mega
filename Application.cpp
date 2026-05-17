@@ -15,8 +15,6 @@
 using namespace wgpu;
 using namespace glm;
 
-constexpr float PI = 3.14159265358979323846f;
-
 void wgpuPollEvents([[maybe_unused]] Device device,
                     [[maybe_unused]] bool yieldToWebBrowser) {
 #if defined(WEBGPU_BACKEND_DAWN)
@@ -80,7 +78,7 @@ bool Application::Initialize() {
   Adapter adapter = instance.requestAdapter(adapterOpts);
   std::cout << "Got adapter: " << adapter << std::endl;
 
-  InspectAdapter(adapter);
+  //  InspectAdapter(adapter);
 
   // NOTE: Once we have the adapter we no longer need the instance
   instance.release();
@@ -108,7 +106,7 @@ bool Application::Initialize() {
 
   std::cout << "Got device: " << device << std::endl;
 
-  InspectDevice(device);
+  //  InspectDevice(device);
 
   // Good for debugging
   uncapturedErrorCallbackHandle = device.setUncapturedErrorCallback(
@@ -139,12 +137,10 @@ bool Application::Initialize() {
   adapter.release();
 
   _InitializePipeline();
-
-  _InitializeBuffers();
-
-  _InitializeBindGroups();
-
+  _InitializeTextures();
   _InitializeDepthStencil();
+  _InitializeBuffers();
+  _InitializeBindGroups();
 
   return true;
 }
@@ -153,6 +149,8 @@ void Application::Terminate() {
   // NOTE: Clean up
   vertexBuffer.release();
   uniformBuffer.release();
+  colorTexture.destroy();
+  colorTexture.release();
   layout.release();
   bindGroupLayout.release();
   bindGroup.release();
@@ -175,17 +173,6 @@ void Application::MainLoop() {
   // Only update the 1-st float of the buffer
   queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, time), &uniforms.time,
                     sizeof(MyUniforms::time));
-
-  // NOTE: update uniforms here
-  float angle1 = uniforms.time;
-  mat4x4 S = scale(mat4x4(1.0), vec3(0.3f));
-  mat4x4 T1 = translate(mat4x4(1.0), vec3(0.0, 0.0, 0.0));
-  mat4x4 R1 = rotate(mat4x4(1.0), angle1, vec3(0.0, 0.0, 1.0));
-
-  uniforms.modelMatrix = R1 * T1 * S;
-
-  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, modelMatrix),
-                    &uniforms.modelMatrix, sizeof(MyUniforms::modelMatrix));
 
   // NOTE: Get the target view to present
   TextureView targetView = _GetNextSurfaceViewData();
@@ -309,6 +296,61 @@ TextureView Application::_GetNextSurfaceViewData() {
   return targetView;
 }
 
+void Application::_InitializeTextures() {
+  // NOTE: we do not have any textures in this sample, but this is where you
+  // would initialize them
+  TextureDescriptor textureDesc;
+  // [...] setup texture descriptor
+  textureDesc.dimension = TextureDimension::_2D;
+  textureDesc.size = {256, 256, 1};
+  textureDesc.mipLevelCount = 1;
+  textureDesc.sampleCount = 1;
+  textureDesc.format = TextureFormat::RGBA8Unorm;
+  textureDesc.usage = TextureUsage::TextureBinding | TextureUsage::CopyDst;
+  textureDesc.viewFormatCount = 0;
+  textureDesc.viewFormats = nullptr;
+
+  colorTexture = device.createTexture(textureDesc);
+  std::cout << "Color texture: " << colorTexture << std::endl;
+
+  std::vector<uint8> pixels(4 * textureDesc.size.width *
+                            textureDesc.size.height);
+  for (uint32_t i = 0; i < textureDesc.size.width; ++i) {
+    for (uint32_t j = 0; j < textureDesc.size.height; ++j) {
+      uint8_t *p = &pixels[4 * (j * textureDesc.size.width + i)];
+      p[0] = (i / 16) % 2 == (j / 16) % 2 ? 255 : 0; // R
+      p[1] = ((i - j) / 16) % 2 == 0 ? 255 : 0;      // G
+      p[2] = ((i + j) / 16) % 2 == 0 ? 255 : 0;      // B
+      p[3] = 255;                                    // A
+    }
+  }
+
+  TextureViewDescriptor textureViewDesc;
+  textureViewDesc.aspect = TextureAspect::All;
+  textureViewDesc.baseArrayLayer = 0;
+  textureViewDesc.arrayLayerCount = 1;
+  textureViewDesc.baseMipLevel = 0;
+  textureViewDesc.mipLevelCount = 1;
+  textureViewDesc.dimension = TextureViewDimension::_2D;
+  textureViewDesc.format = textureDesc.format;
+  colorTextureView = colorTexture.createView(textureViewDesc);
+  std::cout << "Color texture view: " << colorTextureView << std::endl;
+
+  ImageCopyTexture destination;
+  destination.texture = colorTexture;
+  destination.mipLevel = 0;
+  destination.origin = {0, 0, 0};
+  destination.aspect = TextureAspect::All;
+
+  TextureDataLayout source;
+  source.offset = 0;
+  source.bytesPerRow = 4 * textureDesc.size.width;
+  source.rowsPerImage = textureDesc.size.height;
+
+  queue.writeTexture(destination, pixels.data(), pixels.size(), source,
+                     textureDesc.size);
+}
+
 void Application::_InitializeDepthStencil() {
   TextureDescriptor depthTextureDesc;
   depthTextureDesc.dimension = TextureDimension::_2D;
@@ -320,6 +362,7 @@ void Application::_InitializeDepthStencil() {
   depthTextureDesc.viewFormatCount = 1;
   depthTextureDesc.viewFormats = (WGPUTextureFormat *)&depthTextureFormat;
   depthTexture = device.createTexture(depthTextureDesc);
+  std::cout << "Depth texture: " << depthTexture << std::endl;
 
   TextureViewDescriptor depthTextureViewDesc;
   depthTextureViewDesc.aspect = TextureAspect::DepthOnly;
@@ -330,9 +373,14 @@ void Application::_InitializeDepthStencil() {
   depthTextureViewDesc.dimension = TextureViewDimension::_2D;
   depthTextureViewDesc.format = depthTextureFormat;
   depthTextureView = depthTexture.createView(depthTextureViewDesc);
+  std::cout << "Depth texture view: " << depthTextureView << std::endl;
 }
 
 void Application::_InitializePipeline() {
+
+  static_assert(sizeof(MyUniforms) % 16 == 0,
+                "Uniform buffer struct size must be a multiple of 16 bytes");
+
   // NOTE: Create shader module
 
   std::cout << "Creating shader module..." << std::endl;
@@ -366,7 +414,6 @@ void Application::_InitializePipeline() {
   vertexAttribs[1].offset = offsetof(VertexAttributes, normal);
 
   // NOTE: describe color attribute
-  VertexAttribute colorAttrib;
   vertexAttribs[2].shaderLocation = 2;
   vertexAttribs[2].format = VertexFormat::Float32x3;
   vertexAttribs[2].offset = offsetof(VertexAttributes, color);
@@ -436,15 +483,27 @@ void Application::_InitializePipeline() {
   // NOTE: Default value as well (irrelevant for count = 1 anyways)
   pipelineDesc.multisample.alphaToCoverageEnabled = false;
 
-  BindGroupLayoutEntry bindingLayout = Default;
+  // Since we now have 2 bindings, we use a vector to store them
+  std::vector<BindGroupLayoutEntry> bindingLayoutEntries(2, Default);
+
+  // The uniform buffer binding that we already had
+  BindGroupLayoutEntry &bindingLayout = bindingLayoutEntries[0];
   bindingLayout.binding = 0;
   bindingLayout.visibility = ShaderStage::Vertex | ShaderStage::Fragment;
   bindingLayout.buffer.type = BufferBindingType::Uniform;
   bindingLayout.buffer.minBindingSize = sizeof(MyUniforms);
 
+  // The texture binding
+  BindGroupLayoutEntry &textureBindingLayout = bindingLayoutEntries[1];
+  textureBindingLayout.binding = 1;
+  textureBindingLayout.visibility = ShaderStage::Fragment;
+  textureBindingLayout.texture.sampleType = TextureSampleType::Float;
+  textureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
+
+  // Create a bind group layout
   BindGroupLayoutDescriptor bindGroupLayoutDesc{};
-  bindGroupLayoutDesc.entryCount = 1;
-  bindGroupLayoutDesc.entries = &bindingLayout;
+  bindGroupLayoutDesc.entryCount = (uint32_t)bindingLayoutEntries.size();
+  bindGroupLayoutDesc.entries = bindingLayoutEntries.data();
   bindGroupLayout = device.createBindGroupLayout(bindGroupLayoutDesc);
 
   PipelineLayoutDescriptor layoutDesc{};
@@ -460,26 +519,29 @@ void Application::_InitializePipeline() {
 }
 
 void Application::_InitializeBindGroups() {
-  BindGroupEntry binding{};
-  binding.binding = 0;
-  binding.buffer = uniformBuffer;
-  binding.offset = 0;
-  binding.size = sizeof(MyUniforms);
+  std::vector<BindGroupEntry> bindings(2);
 
-  BindGroupDescriptor bindGroupDesc{};
+  bindings[0].binding = 0;
+  bindings[0].buffer = uniformBuffer;
+  bindings[0].offset = 0;
+  bindings[0].size = sizeof(MyUniforms);
+
+  bindings[1].binding = 1;
+  bindings[1].textureView = colorTextureView;
+
+  BindGroupDescriptor bindGroupDesc;
   bindGroupDesc.layout = bindGroupLayout;
-  bindGroupDesc.entryCount = 1;
-  bindGroupDesc.entries = &binding;
+  bindGroupDesc.entryCount = (uint32_t)bindings.size();
+  bindGroupDesc.entries = bindings.data();
   bindGroup = device.createBindGroup(bindGroupDesc);
 }
 
 void Application::_InitializeBuffers() {
-
   // NOTE: setup vertex buffer data
   std::vector<float> pointData;
-
   std::vector<VertexAttributes> vertexData;
-  bool success = ResourceManager::LoadGeometryFromObj(RESOURCE_DIR "/mech.obj",
+
+  bool success = ResourceManager::LoadGeometryFromObj(RESOURCE_DIR "/plane.obj",
                                                       vertexData);
 
   if (!success) {
@@ -508,57 +570,36 @@ void Application::_InitializeBuffers() {
   uniformBuffer = device.createBuffer(bufferDesc);
 
   // NOTE: update uniforms here
-  float angle1 = 2.5f;
-  float angle2 = 2.5 * PI / 4.0;
-  float focalLength = 2.0f;
-  vec3 focalPoint(0.0, 0.0, -1.0);
-  float near = 0.1f;
-  float far = 100.0f;
-  float ratio = 640.0f / 480.0f;
-  float fov = 2 * atan(1 / focalLength);
-
-  mat4x4 S = scale(mat4x4(1.0), vec3(0.3f));
-  mat4x4 T1 = mat4x4(1.0);
-  mat4x4 R1 = rotate(mat4x4(1.0), angle1, vec3(0.0, 0.0, 1.0));
-  uniforms.modelMatrix = R1 * T1 * S;
-
-  mat4x4 R2 = rotate(mat4x4(1.0), -angle2, vec3(1.0, 0.0, 0.0));
-  mat4x4 T2 = translate(mat4x4(1.0), -focalPoint);
-  uniforms.viewMatrix = T2 * R2;
-
-  uniforms.projectionMatrix = perspective(fov, ratio, near, far);
-
+  uniforms.modelMatrix = mat4x4(1.0);
+  uniforms.viewMatrix = scale(mat4x4(1.0), vec3(1.0f));
+  uniforms.projectionMatrix = ortho(-1, 1, -1, 1, -1, 1);
   uniforms.time = 1.0f;
   uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
-
   queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
 }
 
 RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   SupportedLimits supportedLimits;
   adapter.getLimits(&supportedLimits);
-
   RequiredLimits requiredLimits = Default;
-
+  requiredLimits.limits = supportedLimits.limits;
   requiredLimits.limits.maxVertexAttributes = 3;
   requiredLimits.limits.maxVertexBuffers = 1;
-  requiredLimits.limits.maxBufferSize =
-      1000000 * sizeof(VertexAttributes); // NOTE: allow 10000 vertices
+  requiredLimits.limits.maxBufferSize = 10000 * sizeof(VertexAttributes);
   requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
-  requiredLimits.limits.minUniformBufferOffsetAlignment =
-      supportedLimits.limits.minUniformBufferOffsetAlignment;
   requiredLimits.limits.minStorageBufferOffsetAlignment =
       supportedLimits.limits.minStorageBufferOffsetAlignment;
-  requiredLimits.limits.maxTextureDimension2D =
-      supportedLimits.limits.maxTextureDimension2D;
-  requiredLimits.limits.maxInterStageShaderComponents =
-      6; // NOTE: color.rbg + normal.xyz
+  requiredLimits.limits.minUniformBufferOffsetAlignment =
+      supportedLimits.limits.minUniformBufferOffsetAlignment;
+  requiredLimits.limits.maxInterStageShaderComponents = 6;
   requiredLimits.limits.maxBindGroups = 1;
   requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
   requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
   requiredLimits.limits.maxTextureDimension1D = 480;
   requiredLimits.limits.maxTextureDimension2D = 640;
   requiredLimits.limits.maxTextureArrayLayers = 1;
+  // Add the possibility to sample a texture in a shader
+  requiredLimits.limits.maxSampledTexturesPerShaderStage = 1;
 
   return requiredLimits;
 }

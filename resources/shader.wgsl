@@ -19,8 +19,7 @@ struct MyUniforms {
 }
 
 @group(0) @binding(0) var<uniform> uMyUniforms: MyUniforms;
-
-const pi = 3.14159265359;
+@group(0) @binding(1) var gradientTexture: texture_2d<f32>;
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
@@ -34,6 +33,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+	let colorTexture = textureLoad(gradientTexture, vec2<i32>(in.position.xy), 0).rgb;
+
   let normal = normalize(in.normal);
   let lightColor1 = vec3f(1.0, 0.9, 0.6);
   let lightColor2 = vec3f(0.6, 0.9, 1.0);
@@ -42,7 +43,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
   let shading1 = max(0.0, dot(lightDirection1, normal));
   let shading2 = max(0.0, dot(lightDirection2, normal));
   let shading = shading1 * lightColor1 + shading2 * lightColor2;
-  let color = in.color * shading;
+  var color = colorTexture * shading;
+  color = colorTexture;
 
   let linear_color = pow(color, vec3f(2.2));
   return vec4f(linear_color, uMyUniforms.color.a);

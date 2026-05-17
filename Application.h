@@ -29,6 +29,7 @@ private:
   void _InitializeBuffers();
   void _InitializeBindGroups();
   void _InitializeDepthStencil();
+  void _InitializeTextures();
   wgpu::RequiredLimits _GetRequiredLimits(wgpu::Adapter adapter) const;
 
 private:
@@ -41,7 +42,9 @@ private:
   wgpu::TextureFormat surfaceFormat = wgpu::TextureFormat::Undefined;
   wgpu::TextureFormat depthTextureFormat = wgpu::TextureFormat::Undefined;
   wgpu::TextureView depthTextureView;
+  wgpu::TextureView colorTextureView;
   wgpu::Texture depthTexture;
+  wgpu::Texture colorTexture;
   wgpu::PipelineLayout layout;
   wgpu::BindGroupLayout bindGroupLayout;
   wgpu::BindGroup bindGroup;
