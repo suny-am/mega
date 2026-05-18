@@ -1,275 +1,531 @@
 #include "Application.h"
 #include "ResourceManager.h"
-#include "glm/ext/matrix_float4x4.hpp"
-#include "glm/ext/matrix_transform.hpp"
-#include "glm/ext/vector_float3.hpp"
-// #include "webgpu-utils.h"
-#include <GLFW/glfw3.h>
-#include <cstddef>
-#include <glfw3webgpu.h>
-#include <webgpu/webgpu.hpp>
 
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#endif // __EMSCRIPTEN__
+#include <GLFW/glfw3.h>
+#include <glfw3webgpu.h>
+
+#include <glm/ext.hpp>
+#include <glm/glm.hpp>
+
+#include <cassert>
+#include <iostream>
 
 using namespace wgpu;
-using namespace glm;
+using VertexAttributes = ResourceManager::VertexAttributes;
 
 constexpr float PI = 3.14159265358979323846f;
 
-void wgpuPollEvents([[maybe_unused]] Device device,
-                    [[maybe_unused]] bool yieldToWebBrowser) {
-#if defined(WEBGPU_BACKEND_DAWN)
-  device.tick();
-#elif defined(WEBGPU_BACKEND_WGPU)
-  device.poll(false);
-#elif defined(WEBGPU_BACKEND_EMSCRIPTEN)
-  if (yieldToWebBrowser) {
-    emscripten_sleep(100);
-  }
-#endif
-}
+///////////////////////////////////////////////////////////////////////////////
+// Public methods
 
-bool Application::Initialize() {
-  // NOTE: Open window
-  glfwInit();
-  glfwWindowHint(GLFW_CLIENT_API,
-                 GLFW_NO_API); // <-- extra info for glfwCreateWindow
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  window = glfwCreateWindow(640, 480, "Mega", nullptr, nullptr);
-
-  // NOTE: configure instance
-  InstanceDescriptor desc = {};
-
-#ifdef WEBGPU_BACKEND_DAWN
-  // Make sure the uncaptured error callback is called as soon as an error
-  // occurs rather than at the next call to "wgpuDeviceTick".
-  WGPUDawnTogglesDescriptor toggles;
-  toggles.chain.next = nullptr;
-  toggles.chain.sType = WGPUSType_DawnTogglesDescriptor;
-  toggles.disabledToggleCount = 0;
-  toggles.enabledToggleCount = 1;
-  const char *toggleName = "enable_immediate_error_handling";
-  toggles.enabledToggles = &toggleName;
-#endif // WEBGPU_BACKEND_DAWN
-
-  // NOTE: Create instance
-#ifdef WEBGPU_BACKEND_EMSCRIPTEN
-  WGPUInstance instance = wgpuCreateInstance(nullptr);
-#else  //  WEBGPU_BACKEND_EMSCRIPTEN
-  Instance instance = wgpuCreateInstance(&desc);
-#endif //  WEBGPU_BACKEND_EMSCRIPTEN
-
-  // NOTE: Validation
-  if (!instance) {
-    std::cerr << "Could not initialize WebGPU!" << std::endl;
-    return 1;
-  }
-
-  // NOTE: Inspect instance
-  std::cout << "WGPU instance: " << instance << std::endl;
-
-  std::cout << "Requesting adapter..." << std::endl;
-
-  // NOTE: Get surface for adapter
-  surface = glfwGetWGPUSurface(instance, window);
-
-  // NOTE: configure adapter
-  RequestAdapterOptions adapterOpts = {};
-  adapterOpts.compatibleSurface = surface;
-  Adapter adapter = instance.requestAdapter(adapterOpts);
-  std::cout << "Got adapter: " << adapter << std::endl;
-
-  //  InspectAdapter(adapter);
-
-  // NOTE: Once we have the adapter we no longer need the instance
-  instance.release();
-
-  std::cout << "Requesting device..." << std::endl;
-  // NOTE: configure device
-  RequiredLimits requiredLimits = _GetRequiredLimits(adapter);
-
-  DeviceDescriptor deviceDesc = {};
-  deviceDesc.label = "My Device";      // TODO: set to adapter deviceID
-  deviceDesc.requiredFeatureCount = 0; // we do not require any specific feature
-  deviceDesc.requiredLimits = &requiredLimits;
-  deviceDesc.defaultQueue.label = "The default queue";
-  // NOTE: Good for debugging
-  deviceDesc.deviceLostCallback = [](WGPUDeviceLostReason reason,
-                                     char const *message,
-                                     void * /* pUserData */) {
-    std::cout << "Device lost: reason " << reason;
-    if (message)
-      std::cout << " (" << message << ")";
-    std::cout << std::endl;
-  };
-
-  device = adapter.requestDevice(deviceDesc);
-
-  std::cout << "Got device: " << device << std::endl;
-
-  //  InspectDevice(device);
-
-  // Good for debugging
-  uncapturedErrorCallbackHandle = device.setUncapturedErrorCallback(
-      [](ErrorType type, char const *message) {
-        std::cout << "Uncaptured device error: type " << type;
-        if (message)
-          std::cout << " (" << message << ")";
-        std::cout << std::endl;
-      });
-
-  queue = device.getQueue();
-
-  SurfaceConfiguration surfaceConfig = {};
-
-  surfaceConfig.width = 640;
-  surfaceConfig.height = 480;
-  surfaceFormat = surface.getPreferredFormat(adapter);
-  surfaceConfig.format = surfaceFormat;
-  surfaceConfig.viewFormatCount = 0;
-  surfaceConfig.viewFormats = nullptr;
-  surfaceConfig.usage = TextureUsage::RenderAttachment;
-  surfaceConfig.device = device;
-  surfaceConfig.presentMode = PresentMode::Fifo;
-  surfaceConfig.alphaMode = CompositeAlphaMode::Auto;
-
-  surface.configure(surfaceConfig);
-  // NOTE: Once we have the device, we no longer need the adapter
-  adapter.release();
-
-  _InitializePipeline();
-  _InitializeTextures();
-  _InitializeDepthStencil();
-  _InitializeBuffers();
-  _InitializeBindGroups();
-
+bool Application::onInit() {
+  if (!initWindowAndDevice())
+    return false;
+  if (!initDepthBuffer())
+    return false;
+  if (!initRenderPipeline())
+    return false;
+  if (!initTexture())
+    return false;
+  if (!initGeometry())
+    return false;
+  if (!initUniforms())
+    return false;
+  if (!initBindGroup())
+    return false;
   return true;
 }
 
-void Application::Terminate() {
-  // NOTE: Clean up
-  vertexBuffer.release();
-  uniformBuffer.release();
-  colorTexture.destroy();
-  colorTexture.release();
-  layout.release();
-  bindGroupLayout.release();
-  bindGroup.release();
-  pipeline.release();
-  surface.unconfigure();
-  depthTextureView.release();
-  queue.release();
-  surface.release();
-  device.release();
-  glfwDestroyWindow(window);
-  glfwTerminate();
-};
-
-void Application::MainLoop() {
+void Application::onFrame() {
   glfwPollEvents();
 
   // Update uniform buffer
-  uniforms.time =
-      static_cast<float>(glfwGetTime()); // glfwGetTime returns a double
-  queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
+  m_uniforms.time = static_cast<float>(glfwGetTime());
+  m_queue.writeBuffer(m_uniformBuffer, offsetof(MyUniforms, time),
+                      &m_uniforms.time, sizeof(MyUniforms::time));
 
-  // NOTE: Get the target view to present
-  TextureView targetView = _GetNextSurfaceViewData();
-  if (!targetView)
+  TextureView nextTexture = getNextSurfaceViewData();
+  if (!nextTexture) {
+    std::cerr << "Cannot acquire next texture" << std::endl;
     return;
+  }
 
-  // NOTE: Create the command encoder to write to the draw call
-  CommandEncoderDescriptor encoderDesc = {};
-  encoderDesc.label = "Debug command encoder";
-  CommandEncoder encoder = device.createCommandEncoder(encoderDesc);
+  CommandEncoderDescriptor commandEncoderDesc;
+  commandEncoderDesc.label = "Command Encoder";
+  CommandEncoder encoder = m_device.createCommandEncoder(commandEncoderDesc);
 
-  // NOTE: Create the Render Pass descriptor
-  RenderPassDescriptor renderPassDesc = {};
+  RenderPassDescriptor renderPassDesc{};
 
-  // NOTE: Describe render pass
-  RenderPassColorAttachment renderPassColorAttachment = {};
-  // NOTE: Describe the attachment
-  renderPassDesc.colorAttachmentCount = 1;
-  renderPassDesc.colorAttachments = &renderPassColorAttachment;
-  renderPassColorAttachment.view = targetView;
+  RenderPassColorAttachment renderPassColorAttachment{};
+  renderPassColorAttachment.view = nextTexture;
   renderPassColorAttachment.resolveTarget = nullptr;
   renderPassColorAttachment.loadOp = LoadOp::Clear;
   renderPassColorAttachment.storeOp = StoreOp::Store;
   renderPassColorAttachment.clearValue = Color{0.05, 0.05, 0.05, 1.0};
-  // NOTE: WGPU-Native does not support depth slicing
-#ifndef WEBGPU_BACKEND_WGPU
-  renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-#endif // !WEBGPU_BACKEND_WGPU
+  renderPassDesc.colorAttachmentCount = 1;
+  renderPassDesc.colorAttachments = &renderPassColorAttachment;
 
   RenderPassDepthStencilAttachment depthStencilAttachment;
-  depthStencilAttachment.view = depthTextureView;
+  depthStencilAttachment.view = m_depthTextureView;
   depthStencilAttachment.depthClearValue = 1.0f;
   depthStencilAttachment.depthLoadOp = LoadOp::Clear;
   depthStencilAttachment.depthStoreOp = StoreOp::Store;
   depthStencilAttachment.depthReadOnly = false;
   depthStencilAttachment.stencilClearValue = 0;
+#ifdef WEBGPU_BACKEND_WGPU
   depthStencilAttachment.stencilLoadOp = LoadOp::Clear;
   depthStencilAttachment.stencilStoreOp = StoreOp::Store;
-  depthStencilAttachment.stencilReadOnly = true;
-
-#ifdef WEBGPU_BACKEND_DAWN
+#else
   depthStencilAttachment.stencilLoadOp = LoadOp::Undefined;
   depthStencilAttachment.stencilStoreOp = StoreOp::Undefined;
-  constexpr auto NaNf = std::vnumeric_limits<float>::quiet_NaN();
-  depthStencilAttachment.clearDepth = NaNf;
 #endif
+  depthStencilAttachment.stencilReadOnly = true;
 
   renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
 
   renderPassDesc.timestampWrites = nullptr;
-
-  // NOTE: Create the render pass encoder
   RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
 
-  renderPass.setPipeline(pipeline);
+  renderPass.setPipeline(m_pipeline);
 
-  // NOTE: set vertex buffer while encoding render pass
-  renderPass.setVertexBuffer(0, vertexBuffer, 0, vertexBuffer.getSize());
+  renderPass.setVertexBuffer(0, m_vertexBuffer, 0,
+                             m_vertexCount * sizeof(VertexAttributes));
 
-  // NOTE: set bind group for render pass
-  renderPass.setBindGroup(0, bindGroup, 0, nullptr);
+  // Set binding group
+  renderPass.setBindGroup(0, m_bindGroup, 0, nullptr);
 
-  renderPass.draw(indexCount, 1, 0, 0);
+  renderPass.draw(m_vertexCount, 1, 0, 0);
 
-  // NOTE: use render pass
   renderPass.end();
   renderPass.release();
 
-  CommandBufferDescriptor cmdBufferDesc = {};
-  cmdBufferDesc.label = "Command buffer";
-  CommandBuffer command = encoder.finish(cmdBufferDesc);
+  CommandBufferDescriptor cmdBufferDescriptor{};
+  cmdBufferDescriptor.label = "Command buffer";
+  CommandBuffer command = encoder.finish(cmdBufferDescriptor);
   encoder.release();
-
-  std::cout << "Submitting command..." << std::endl;
-  queue.submit(1, &command);
+  m_queue.submit(command);
   command.release();
-  std::cout << "Command submitted" << std::endl;
 
-  targetView.release();
+  nextTexture.release();
 #ifndef __EMSCRIPTEN
-  surface.present();
+  m_surface.present();
 #endif // !__EMSCRIPTEN__
-       //
+
 #if defined(WEBGPU_BACKEND_DAWN)
   std::cout << "Waiting for tick..." << std::endl;
   wgpuDeviceTick(device);
 #elif defined(WEBGPU_BACKEND_WGPU)
   std::cout << "Polling device..." << std::endl;
-  device.poll(false);
+  m_device.poll(false);
 #endif
-};
+}
 
-TextureView Application::_GetNextSurfaceViewData() {
+void Application::onFinish() {
+  terminateBindGroup();
+  terminateUniforms();
+  terminateGeometry();
+  terminateTexture();
+  terminateRenderPipeline();
+  terminateDepthBuffer();
+  terminateWindowAndDevice();
+}
+
+bool Application::isRunning() { return !glfwWindowShouldClose(m_window); }
+
+///////////////////////////////////////////////////////////////////////////////
+// Private methods
+
+bool Application::initWindowAndDevice() {
+  m_instance = createInstance(InstanceDescriptor{});
+  if (!m_instance) {
+    std::cerr << "Could not initialize WebGPU!" << std::endl;
+    return false;
+  }
+
+  if (!glfwInit()) {
+    std::cerr << "Could not initialize GLFW!" << std::endl;
+    return false;
+  }
+
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  m_window = glfwCreateWindow(640, 480, "Learn WebGPU", NULL, NULL);
+  if (!m_window) {
+    std::cerr << "Could not open window!" << std::endl;
+    return false;
+  }
+
+  std::cout << "Requesting adapter..." << std::endl;
+  m_surface = glfwGetWGPUSurface(m_instance, m_window);
+  RequestAdapterOptions adapterOpts{};
+  adapterOpts.compatibleSurface = m_surface;
+  Adapter adapter = m_instance.requestAdapter(adapterOpts);
+  std::cout << "Got adapter: " << adapter << std::endl;
+
+  SupportedLimits supportedLimits;
+  adapter.getLimits(&supportedLimits);
+
+  std::cout << "Requesting device..." << std::endl;
+  RequiredLimits requiredLimits = Default;
+  requiredLimits.limits = supportedLimits.limits;
+  requiredLimits.limits.maxVertexAttributes = 4;
+  requiredLimits.limits.maxVertexBuffers = 1;
+  requiredLimits.limits.maxBufferSize = 150000 * sizeof(VertexAttributes);
+  requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
+  requiredLimits.limits.minStorageBufferOffsetAlignment =
+      supportedLimits.limits.minStorageBufferOffsetAlignment;
+  requiredLimits.limits.minUniformBufferOffsetAlignment =
+      supportedLimits.limits.minUniformBufferOffsetAlignment;
+  requiredLimits.limits.maxInterStageShaderComponents = 8;
+  requiredLimits.limits.maxBindGroups = 1;
+  requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
+  requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
+  // Allow textures up to 2K
+  requiredLimits.limits.maxTextureDimension1D = 2048;
+  requiredLimits.limits.maxTextureDimension2D = 2048;
+  requiredLimits.limits.maxTextureArrayLayers = 1;
+  requiredLimits.limits.maxSampledTexturesPerShaderStage = 1;
+  requiredLimits.limits.maxSamplersPerShaderStage = 1;
+
+  DeviceDescriptor deviceDesc;
+  deviceDesc.label = "My Device";
+  deviceDesc.requiredLimits = &requiredLimits;
+  deviceDesc.defaultQueue.label = "The default queue";
+  m_device = adapter.requestDevice(deviceDesc);
+  std::cout << "Got device: " << m_device << std::endl;
+
+  // Add an error callback for more debug info
+  m_errorCallbackHandle = m_device.setUncapturedErrorCallback(
+      [](ErrorType type, char const *message) {
+        std::cout << "Device error: type " << type;
+        if (message)
+          std::cout << " (message: " << message << ")";
+        std::cout << std::endl;
+      });
+
+  m_queue = m_device.getQueue();
+
+  SurfaceConfiguration surfaceConfig = {};
+
+  surfaceConfig.width = 640;
+  surfaceConfig.height = 480;
+  m_surfaceFormat = m_surface.getPreferredFormat(adapter);
+  surfaceConfig.format = m_surfaceFormat;
+  surfaceConfig.viewFormatCount = 0;
+  surfaceConfig.viewFormats = nullptr;
+  surfaceConfig.usage = TextureUsage::RenderAttachment;
+  surfaceConfig.device = m_device;
+  surfaceConfig.presentMode = PresentMode::Fifo;
+  surfaceConfig.alphaMode = CompositeAlphaMode::Auto;
+
+  m_surface.configure(surfaceConfig);
+
+  adapter.release();
+  return m_device != nullptr;
+}
+
+void Application::terminateWindowAndDevice() {
+  m_queue.release();
+  m_device.release();
+  m_surface.release();
+  m_instance.release();
+
+  glfwDestroyWindow(m_window);
+  glfwTerminate();
+}
+
+bool Application::initDepthBuffer() {
+  // Create the depth texture
+  TextureDescriptor depthTextureDesc;
+  depthTextureDesc.dimension = TextureDimension::_2D;
+  depthTextureDesc.format = m_depthTextureFormat;
+  depthTextureDesc.mipLevelCount = 1;
+  depthTextureDesc.sampleCount = 1;
+  depthTextureDesc.size = {640, 480, 1};
+  depthTextureDesc.usage = TextureUsage::RenderAttachment;
+  depthTextureDesc.viewFormatCount = 1;
+  depthTextureDesc.viewFormats = (WGPUTextureFormat *)&m_depthTextureFormat;
+  m_depthTexture = m_device.createTexture(depthTextureDesc);
+  std::cout << "Depth texture: " << m_depthTexture << std::endl;
+
+  // Create the view of the depth texture manipulated by the rasterizer
+  TextureViewDescriptor depthTextureViewDesc;
+  depthTextureViewDesc.aspect = TextureAspect::DepthOnly;
+  depthTextureViewDesc.baseArrayLayer = 0;
+  depthTextureViewDesc.arrayLayerCount = 1;
+  depthTextureViewDesc.baseMipLevel = 0;
+  depthTextureViewDesc.mipLevelCount = 1;
+  depthTextureViewDesc.dimension = TextureViewDimension::_2D;
+  depthTextureViewDesc.format = m_depthTextureFormat;
+  m_depthTextureView = m_depthTexture.createView(depthTextureViewDesc);
+  std::cout << "Depth texture view: " << m_depthTextureView << std::endl;
+
+  return m_depthTextureView != nullptr;
+}
+
+void Application::terminateDepthBuffer() {
+  m_depthTextureView.release();
+  m_depthTexture.destroy();
+  m_depthTexture.release();
+}
+
+bool Application::initRenderPipeline() {
+  std::cout << "Creating shader module..." << std::endl;
+  m_shaderModule =
+      ResourceManager::loadShaderModule(RESOURCE_DIR "/shader.wgsl", m_device);
+  std::cout << "Shader module: " << m_shaderModule << std::endl;
+
+  std::cout << "Creating render pipeline..." << std::endl;
+  RenderPipelineDescriptor pipelineDesc;
+
+  // Vertex fetch
+  std::vector<VertexAttribute> vertexAttribs(4);
+
+  // Position attribute
+  vertexAttribs[0].shaderLocation = 0;
+  vertexAttribs[0].format = VertexFormat::Float32x3;
+  vertexAttribs[0].offset = 0;
+
+  // Normal attribute
+  vertexAttribs[1].shaderLocation = 1;
+  vertexAttribs[1].format = VertexFormat::Float32x3;
+  vertexAttribs[1].offset = offsetof(VertexAttributes, normal);
+
+  // Color attribute
+  vertexAttribs[2].shaderLocation = 2;
+  vertexAttribs[2].format = VertexFormat::Float32x3;
+  vertexAttribs[2].offset = offsetof(VertexAttributes, color);
+
+  // UV attribute
+  vertexAttribs[3].shaderLocation = 3;
+  vertexAttribs[3].format = VertexFormat::Float32x2;
+  vertexAttribs[3].offset = offsetof(VertexAttributes, uv);
+
+  VertexBufferLayout vertexBufferLayout;
+  vertexBufferLayout.attributeCount = (uint32_t)vertexAttribs.size();
+  vertexBufferLayout.attributes = vertexAttribs.data();
+  vertexBufferLayout.arrayStride = sizeof(VertexAttributes);
+  vertexBufferLayout.stepMode = VertexStepMode::Vertex;
+
+  pipelineDesc.vertex.bufferCount = 1;
+  pipelineDesc.vertex.buffers = &vertexBufferLayout;
+
+  pipelineDesc.vertex.module = m_shaderModule;
+  pipelineDesc.vertex.entryPoint = "vs_main";
+  pipelineDesc.vertex.constantCount = 0;
+  pipelineDesc.vertex.constants = nullptr;
+
+  pipelineDesc.primitive.topology = PrimitiveTopology::TriangleList;
+  pipelineDesc.primitive.stripIndexFormat = IndexFormat::Undefined;
+  pipelineDesc.primitive.frontFace = FrontFace::CCW;
+  pipelineDesc.primitive.cullMode = CullMode::None;
+
+  FragmentState fragmentState;
+  pipelineDesc.fragment = &fragmentState;
+  fragmentState.module = m_shaderModule;
+  fragmentState.entryPoint = "fs_main";
+  fragmentState.constantCount = 0;
+  fragmentState.constants = nullptr;
+
+  BlendState blendState;
+  blendState.color.srcFactor = BlendFactor::SrcAlpha;
+  blendState.color.dstFactor = BlendFactor::OneMinusSrcAlpha;
+  blendState.color.operation = BlendOperation::Add;
+  blendState.alpha.srcFactor = BlendFactor::Zero;
+  blendState.alpha.dstFactor = BlendFactor::One;
+  blendState.alpha.operation = BlendOperation::Add;
+
+  ColorTargetState colorTarget;
+  colorTarget.blend = &blendState;
+  colorTarget.format = m_surfaceFormat;
+  colorTarget.writeMask = ColorWriteMask::All;
+
+  fragmentState.targetCount = 1;
+  fragmentState.targets = &colorTarget;
+
+  DepthStencilState depthStencilState = Default;
+  depthStencilState.depthCompare = CompareFunction::Less;
+  depthStencilState.depthWriteEnabled = true;
+  depthStencilState.format = m_depthTextureFormat;
+  depthStencilState.stencilReadMask = 0;
+  depthStencilState.stencilWriteMask = 0;
+
+  pipelineDesc.depthStencil = &depthStencilState;
+
+  pipelineDesc.multisample.count = 1;
+  pipelineDesc.multisample.mask = ~0u;
+  pipelineDesc.multisample.alphaToCoverageEnabled = false;
+
+  // Create binding layouts
+
+  // Since we now have 2 bindings, we use a vector to store them
+  std::vector<BindGroupLayoutEntry> bindingLayoutEntries(3, Default);
+
+  // The uniform buffer binding that we already had
+  BindGroupLayoutEntry &bindingLayout = bindingLayoutEntries[0];
+  bindingLayout.binding = 0;
+  bindingLayout.visibility = ShaderStage::Vertex | ShaderStage::Fragment;
+  bindingLayout.buffer.type = BufferBindingType::Uniform;
+  bindingLayout.buffer.minBindingSize = sizeof(MyUniforms);
+
+  // The texture binding
+  BindGroupLayoutEntry &textureBindingLayout = bindingLayoutEntries[1];
+  textureBindingLayout.binding = 1;
+  textureBindingLayout.visibility = ShaderStage::Fragment;
+  textureBindingLayout.texture.sampleType = TextureSampleType::Float;
+  textureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
+
+  // The texture sampler binding
+  BindGroupLayoutEntry &samplerBindingLayout = bindingLayoutEntries[2];
+  samplerBindingLayout.binding = 2;
+  samplerBindingLayout.visibility = ShaderStage::Fragment;
+  samplerBindingLayout.sampler.type = SamplerBindingType::Filtering;
+
+  // Create a bind group layout
+  BindGroupLayoutDescriptor bindGroupLayoutDesc{};
+  bindGroupLayoutDesc.entryCount = (uint32_t)bindingLayoutEntries.size();
+  bindGroupLayoutDesc.entries = bindingLayoutEntries.data();
+  m_bindGroupLayout = m_device.createBindGroupLayout(bindGroupLayoutDesc);
+
+  // Create the pipeline layout
+  PipelineLayoutDescriptor layoutDesc{};
+  layoutDesc.bindGroupLayoutCount = 1;
+  layoutDesc.bindGroupLayouts = (WGPUBindGroupLayout *)&m_bindGroupLayout;
+  PipelineLayout layout = m_device.createPipelineLayout(layoutDesc);
+  pipelineDesc.layout = layout;
+
+  m_pipeline = m_device.createRenderPipeline(pipelineDesc);
+  std::cout << "Render pipeline: " << m_pipeline << std::endl;
+
+  return m_pipeline != nullptr;
+}
+
+void Application::terminateRenderPipeline() {
+  m_pipeline.release();
+  m_shaderModule.release();
+  m_bindGroupLayout.release();
+}
+
+bool Application::initTexture() {
+  // Create a sampler
+  SamplerDescriptor samplerDesc;
+  samplerDesc.addressModeU = AddressMode::Repeat;
+  samplerDesc.addressModeV = AddressMode::Repeat;
+  samplerDesc.addressModeW = AddressMode::Repeat;
+  samplerDesc.magFilter = FilterMode::Linear;
+  samplerDesc.minFilter = FilterMode::Linear;
+  samplerDesc.mipmapFilter = MipmapFilterMode::Linear;
+  samplerDesc.lodMinClamp = 0.0f;
+  samplerDesc.lodMaxClamp = 8.0f;
+  samplerDesc.compare = CompareFunction::Undefined;
+  samplerDesc.maxAnisotropy = 1;
+  m_sampler = m_device.createSampler(samplerDesc);
+
+  // Create a texture
+  m_texture = ResourceManager::loadTexture(
+      RESOURCE_DIR "/fourareen2K_albedo.jpg", m_device, &m_textureView);
+  if (!m_texture) {
+    std::cerr << "Could not load texture!" << std::endl;
+    return false;
+  }
+  std::cout << "Texture: " << m_texture << std::endl;
+  std::cout << "Texture view: " << m_textureView << std::endl;
+
+  return m_textureView != nullptr;
+}
+
+void Application::terminateTexture() {
+  m_textureView.release();
+  m_texture.destroy();
+  m_texture.release();
+  m_sampler.release();
+}
+
+bool Application::initGeometry() {
+  // Load mesh data from OBJ file
+  std::vector<VertexAttributes> vertexData;
+  bool success = ResourceManager::loadGeometryFromObj(
+      RESOURCE_DIR "/fourareen.obj", vertexData);
+  if (!success) {
+    std::cerr << "Could not load geometry!" << std::endl;
+    return false;
+  }
+
+  // Create vertex buffer
+  BufferDescriptor bufferDesc;
+  bufferDesc.size = vertexData.size() * sizeof(VertexAttributes);
+  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
+  bufferDesc.mappedAtCreation = false;
+  m_vertexBuffer = m_device.createBuffer(bufferDesc);
+  m_queue.writeBuffer(m_vertexBuffer, 0, vertexData.data(), bufferDesc.size);
+
+  m_vertexCount = static_cast<int>(vertexData.size());
+
+  return m_vertexBuffer != nullptr;
+}
+
+void Application::terminateGeometry() {
+  m_vertexBuffer.destroy();
+  m_vertexBuffer.release();
+  m_vertexCount = 0;
+}
+
+bool Application::initUniforms() {
+  // Create uniform buffer
+  BufferDescriptor bufferDesc;
+  bufferDesc.size = sizeof(MyUniforms);
+  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
+  bufferDesc.mappedAtCreation = false;
+  m_uniformBuffer = m_device.createBuffer(bufferDesc);
+
+  // Upload the initial value of the uniforms
+  m_uniforms.modelMatrix = mat4x4(1.0);
+  m_uniforms.viewMatrix =
+      glm::lookAt(vec3(-2.0f, -3.0f, 2.0f), vec3(0.0f), vec3(0, 0, 1));
+  m_uniforms.projectionMatrix =
+      glm::perspective(45 * PI / 180, 640.0f / 480.0f, 0.01f, 100.0f);
+  m_uniforms.time = 1.0f;
+  m_uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
+  m_queue.writeBuffer(m_uniformBuffer, 0, &m_uniforms, sizeof(MyUniforms));
+
+  return m_uniformBuffer != nullptr;
+}
+
+void Application::terminateUniforms() {
+  m_uniformBuffer.destroy();
+  m_uniformBuffer.release();
+}
+
+bool Application::initBindGroup() {
+  // Create a binding
+  std::vector<BindGroupEntry> bindings(3);
+
+  bindings[0].binding = 0;
+  bindings[0].buffer = m_uniformBuffer;
+  bindings[0].offset = 0;
+  bindings[0].size = sizeof(MyUniforms);
+
+  bindings[1].binding = 1;
+  bindings[1].textureView = m_textureView;
+
+  bindings[2].binding = 2;
+  bindings[2].sampler = m_sampler;
+
+  BindGroupDescriptor bindGroupDesc;
+  bindGroupDesc.layout = m_bindGroupLayout;
+  bindGroupDesc.entryCount = (uint32_t)bindings.size();
+  bindGroupDesc.entries = bindings.data();
+  m_bindGroup = m_device.createBindGroup(bindGroupDesc);
+
+  return m_bindGroup != nullptr;
+}
+
+void Application::terminateBindGroup() { m_bindGroup.release(); }
+
+TextureView Application::getNextSurfaceViewData() {
 
   SurfaceTexture surfaceTexture;
-  surface.getCurrentTexture(&surfaceTexture);
+  m_surface.getCurrentTexture(&surfaceTexture);
 
   if (surfaceTexture.status != SurfaceGetCurrentTextureStatus::Success) {
     return nullptr;
@@ -296,301 +552,3 @@ TextureView Application::_GetNextSurfaceViewData() {
 
   return targetView;
 }
-
-void Application::_InitializeTextures() {
-  colorTexture = ResourceManager::LoadTexture(
-      RESOURCE_DIR "/fourareen2K_albedo.jpg", device, &colorTextureView);
-  if (!colorTexture) {
-    std::cerr << "Could not load texture!" << std::endl;
-    exit(1);
-  }
-
-  std::cout << "Color texture: " << colorTexture << std::endl;
-
-  std::cout << "Color texture view: " << colorTextureView << std::endl;
-
-  SamplerDescriptor samplerDesc;
-  samplerDesc.addressModeU = AddressMode::Repeat;
-  samplerDesc.addressModeV = AddressMode::Repeat;
-  samplerDesc.addressModeW = AddressMode::Repeat;
-  samplerDesc.magFilter = FilterMode::Linear;
-  samplerDesc.minFilter = FilterMode::Linear;
-  samplerDesc.mipmapFilter = MipmapFilterMode::Linear;
-  samplerDesc.lodMinClamp = 0.0f;
-  samplerDesc.lodMaxClamp = 8.0f;
-  samplerDesc.compare = CompareFunction::Undefined;
-  samplerDesc.maxAnisotropy = 1;
-  sampler = device.createSampler(samplerDesc);
-}
-
-void Application::_InitializeDepthStencil() {
-  TextureDescriptor depthTextureDesc;
-  depthTextureDesc.dimension = TextureDimension::_2D;
-  depthTextureDesc.format = depthTextureFormat;
-  depthTextureDesc.mipLevelCount = 1;
-  depthTextureDesc.sampleCount = 1;
-  depthTextureDesc.size = {640, 480, 1};
-  depthTextureDesc.usage = TextureUsage::RenderAttachment;
-  depthTextureDesc.viewFormatCount = 1;
-  depthTextureDesc.viewFormats = (WGPUTextureFormat *)&depthTextureFormat;
-  depthTexture = device.createTexture(depthTextureDesc);
-  std::cout << "Depth texture: " << depthTexture << std::endl;
-
-  TextureViewDescriptor depthTextureViewDesc;
-  depthTextureViewDesc.aspect = TextureAspect::DepthOnly;
-  depthTextureViewDesc.baseArrayLayer = 0;
-  depthTextureViewDesc.arrayLayerCount = 1;
-  depthTextureViewDesc.baseMipLevel = 0;
-  depthTextureViewDesc.mipLevelCount = 1;
-  depthTextureViewDesc.dimension = TextureViewDimension::_2D;
-  depthTextureViewDesc.format = depthTextureFormat;
-  depthTextureView = depthTexture.createView(depthTextureViewDesc);
-  std::cout << "Depth texture view: " << depthTextureView << std::endl;
-}
-
-void Application::_InitializePipeline() {
-
-  static_assert(sizeof(MyUniforms) % 16 == 0,
-                "Uniform buffer struct size must be a multiple of 16 bytes");
-
-  // NOTE: Create shader module
-
-  std::cout << "Creating shader module..." << std::endl;
-  ShaderModule shaderModule =
-      ResourceManager::LoadShaderModule(RESOURCE_DIR "/shader.wgsl", device);
-  std::cout << "Shader module: " << shaderModule << std::endl;
-
-  // Check for errors
-  if (shaderModule == nullptr) {
-    std::cerr << "Could not load shader!" << std::endl;
-    exit(1);
-  }
-
-  // NOTE: Describe pipeline
-  RenderPipelineDescriptor pipelineDesc;
-
-  // NOTE: Describe pipeline
-  VertexBufferLayout vertexBufferLayout;
-
-  // NOTE: 3 attributes: position, normal and color
-  std::vector<VertexAttribute> vertexAttribs(4);
-
-  // NOTE: describe position attribute
-  vertexAttribs[0].shaderLocation = 0;
-  vertexAttribs[0].format = VertexFormat::Float32x3;
-  vertexAttribs[0].offset = offsetof(VertexAttributes, position);
-
-  // NOTE: describe normal attribute
-  vertexAttribs[1].shaderLocation = 1;
-  vertexAttribs[1].format = VertexFormat::Float32x3;
-  vertexAttribs[1].offset = offsetof(VertexAttributes, normal);
-
-  // NOTE: describe color attribute
-  vertexAttribs[2].shaderLocation = 2;
-  vertexAttribs[2].format = VertexFormat::Float32x3;
-  vertexAttribs[2].offset = offsetof(VertexAttributes, color);
-
-  // NOTE: describe uv attribute
-  vertexAttribs[3].shaderLocation = 3;
-  vertexAttribs[3].format = VertexFormat::Float32x2;
-  vertexAttribs[3].offset = offsetof(VertexAttributes, uv);
-
-  vertexBufferLayout.attributeCount =
-      static_cast<uint32_t>(vertexAttribs.size());
-  vertexBufferLayout.attributes = vertexAttribs.data();
-  vertexBufferLayout.arrayStride = sizeof(VertexAttributes);
-  vertexBufferLayout.stepMode = VertexStepMode::Vertex;
-
-  pipelineDesc.vertex.bufferCount = 1;
-  pipelineDesc.vertex.buffers = &vertexBufferLayout;
-
-  pipelineDesc.vertex.module = shaderModule;
-  pipelineDesc.vertex.entryPoint = "vs_main";
-  pipelineDesc.vertex.constantCount = 0;
-  pipelineDesc.vertex.constants = nullptr;
-
-  pipelineDesc.primitive.topology = PrimitiveTopology::TriangleList;
-  pipelineDesc.primitive.stripIndexFormat = IndexFormat::Undefined;
-  pipelineDesc.primitive.frontFace = FrontFace::CCW;
-  // NOTE: good for develipment; as non-manyfold topology can sometimes be
-  // obscured
-  pipelineDesc.primitive.cullMode = CullMode::None;
-
-  FragmentState fragmentState;
-  fragmentState.module = shaderModule;
-  fragmentState.entryPoint = "fs_main";
-  fragmentState.constantCount = 0;
-  fragmentState.constants = nullptr;
-
-  DepthStencilState depthStencilState = Default;
-  depthStencilState.depthCompare = CompareFunction::Less;
-  // NOTE: it is good to disable the depth writing for transparent objects and
-  // UI elements
-  depthStencilState.depthWriteEnabled = true;
-  depthTextureFormat = TextureFormat::Depth24Plus;
-  depthStencilState.format = depthTextureFormat;
-  // NOTE: deactivate stencil
-  depthStencilState.stencilReadMask = 0;
-  depthStencilState.stencilWriteMask = 0;
-
-  pipelineDesc.depthStencil = &depthStencilState;
-
-  BlendState blendState;
-  blendState.color.srcFactor = BlendFactor::SrcAlpha;
-  blendState.color.dstFactor = BlendFactor::OneMinusSrcAlpha;
-  blendState.color.operation = BlendOperation::Add;
-
-  blendState.alpha.srcFactor = BlendFactor::Zero;
-  blendState.alpha.dstFactor = BlendFactor::One;
-  blendState.alpha.operation = BlendOperation::Add;
-
-  ColorTargetState colorTarget;
-  colorTarget.format = surfaceFormat;
-  colorTarget.blend = &blendState;
-  colorTarget.writeMask = ColorWriteMask::All;
-
-  fragmentState.targetCount = 1;
-  fragmentState.targets = &colorTarget;
-
-  pipelineDesc.fragment = &fragmentState;
-  // NOTE: sammple per pixel
-  pipelineDesc.multisample.count = 1;
-  // NOTE: default value for mask, meaning "all bits on"
-  pipelineDesc.multisample.mask = ~0u;
-  // NOTE: Default value as well (irrelevant for count = 1 anyways)
-  pipelineDesc.multisample.alphaToCoverageEnabled = false;
-
-  // Since we now have 2 bindings, we use a vector to store them
-  std::vector<BindGroupLayoutEntry> bindingLayoutEntries(3, Default);
-
-  // The uniform buffer binding that we already had
-  BindGroupLayoutEntry &bindingLayout = bindingLayoutEntries[0];
-  bindingLayout.binding = 0;
-  bindingLayout.visibility = ShaderStage::Vertex | ShaderStage::Fragment;
-  bindingLayout.buffer.type = BufferBindingType::Uniform;
-  bindingLayout.buffer.minBindingSize = sizeof(MyUniforms);
-
-  // The texture binding
-  BindGroupLayoutEntry &textureBindingLayout = bindingLayoutEntries[1];
-  textureBindingLayout.binding = 1;
-  textureBindingLayout.visibility = ShaderStage::Fragment;
-  textureBindingLayout.texture.sampleType = TextureSampleType::Float;
-  textureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
-
-  BindGroupLayoutEntry &samplerBindingLayout = bindingLayoutEntries[2];
-  samplerBindingLayout.binding = 2;
-  samplerBindingLayout.visibility = ShaderStage::Fragment;
-  samplerBindingLayout.sampler.type = SamplerBindingType::Filtering;
-
-  // Create a bind group layout
-  BindGroupLayoutDescriptor bindGroupLayoutDesc{};
-  bindGroupLayoutDesc.entryCount = (uint32_t)bindingLayoutEntries.size();
-  bindGroupLayoutDesc.entries = bindingLayoutEntries.data();
-  bindGroupLayout = device.createBindGroupLayout(bindGroupLayoutDesc);
-
-  PipelineLayoutDescriptor layoutDesc{};
-  layoutDesc.bindGroupLayoutCount = 1;
-  layoutDesc.bindGroupLayouts = (WGPUBindGroupLayout *)&bindGroupLayout;
-  layout = device.createPipelineLayout(layoutDesc);
-
-  pipelineDesc.layout = layout;
-
-  pipeline = device.createRenderPipeline(pipelineDesc);
-
-  shaderModule.release();
-}
-
-void Application::_InitializeBindGroups() {
-  std::vector<BindGroupEntry> bindings(3);
-
-  bindings[0].binding = 0;
-  bindings[0].buffer = uniformBuffer;
-  bindings[0].offset = 0;
-  bindings[0].size = sizeof(MyUniforms);
-
-  bindings[1].binding = 1;
-  bindings[1].textureView = colorTextureView;
-
-  bindings[2].binding = 2;
-  bindings[2].sampler = sampler;
-
-  BindGroupDescriptor bindGroupDesc;
-  bindGroupDesc.layout = bindGroupLayout;
-  bindGroupDesc.entryCount = (uint32_t)bindings.size();
-  bindGroupDesc.entries = bindings.data();
-  bindGroup = device.createBindGroup(bindGroupDesc);
-}
-
-void Application::_InitializeBuffers() {
-  // NOTE: setup vertex buffer data
-  std::vector<float> pointData;
-  std::vector<VertexAttributes> vertexData;
-
-  bool success = ResourceManager::LoadGeometryFromObj(
-      RESOURCE_DIR "/fourareen.obj", vertexData);
-
-  if (!success) {
-    std::cerr << "Could not load geometry" << std::endl;
-    exit(1);
-  }
-
-  indexCount = static_cast<int>(vertexData.size());
-
-  // NOTE: common buffer config
-  BufferDescriptor bufferDesc;
-  bufferDesc.mappedAtCreation = false;
-
-  // NOTE: position buffer
-  bufferDesc.label = "Vertex buffer";
-  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
-  bufferDesc.size = vertexData.size() * sizeof(VertexAttributes);
-  vertexBuffer = device.createBuffer(bufferDesc);
-
-  queue.writeBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
-
-  // NOTE: uniform buffer
-  bufferDesc.label = "Vertex uniforms";
-  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
-  bufferDesc.size = sizeof(MyUniforms);
-  uniformBuffer = device.createBuffer(bufferDesc);
-
-  // NOTE: update uniforms here
-  uniforms.modelMatrix = mat4x4(1.0);
-  uniforms.viewMatrix =
-      glm::lookAt(vec3(-2.0f, -3.0f, 2.0f), vec3(0.0f), vec3(0, 0, 1));
-  uniforms.projectionMatrix =
-      glm::perspective(45 * PI / 180, 640.0f / 480.0f, 0.01f, 100.0f);
-
-  uniforms.time = 1.0f;
-  uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
-  queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
-}
-
-RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
-  SupportedLimits supportedLimits;
-  adapter.getLimits(&supportedLimits);
-  RequiredLimits requiredLimits = Default;
-  requiredLimits.limits = supportedLimits.limits;
-  requiredLimits.limits.maxVertexAttributes = 4;
-  requiredLimits.limits.maxVertexBuffers = 1;
-  requiredLimits.limits.maxBufferSize = 150000 * sizeof(VertexAttributes);
-  requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
-  requiredLimits.limits.minStorageBufferOffsetAlignment =
-      supportedLimits.limits.minStorageBufferOffsetAlignment;
-  requiredLimits.limits.minUniformBufferOffsetAlignment =
-      supportedLimits.limits.minUniformBufferOffsetAlignment;
-  requiredLimits.limits.maxInterStageShaderComponents = 8;
-  requiredLimits.limits.maxBindGroups = 1;
-  requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
-  requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
-  requiredLimits.limits.maxTextureDimension1D = 2048;
-  requiredLimits.limits.maxTextureDimension2D = 2048;
-  requiredLimits.limits.maxTextureArrayLayers = 1;
-  // Add the possibility to sample a texture in a shader
-  requiredLimits.limits.maxSampledTexturesPerShaderStage = 1;
-  requiredLimits.limits.maxSamplersPerShaderStage = 1;
-
-  return requiredLimits;
-}
-
-bool Application::isRunning() { return !glfwWindowShouldClose(window); }

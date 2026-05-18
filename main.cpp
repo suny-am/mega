@@ -4,7 +4,7 @@ int main(int, char **) {
 
   Application app;
 
-  if (!app.Initialize()) {
+  if (!app.onInit()) {
     return 1;
   }
 
@@ -13,15 +13,15 @@ int main(int, char **) {
   auto callback = [](void *arg)
 }
 Application *pApp = reinterpret_cast<Application *>(arg);
-pApp->MainLoop();
+pApp->OnFrame();
 emscripten_set_main_loop_arg(callback, &app, 0, true);
 #else
   while (app.isRunning()) {
-    app.MainLoop();
+    app.onFrame();
   }
 #endif //  __EMSCRIPTEN__
 
-app.Terminate();
+app.onFinish();
 
 return 0;
 }

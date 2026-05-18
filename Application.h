@@ -1,66 +1,105 @@
 #pragma once
 
-#include "glfw/include/GLFW/glfw3.h"
-#include <glm/ext.hpp>
 #include <glm/glm.hpp>
-#include <memory>
 #include <webgpu/webgpu.hpp>
+
+// Forward declare
+struct GLFWwindow;
 
 class Application {
 public:
-  bool Initialize();
+  // A function called only once at the beginning. Returns false is init failed.
+  bool onInit();
 
-  void Terminate();
+  // A function called at each frame, guaranteed never to be called before
+  // `onInit`.
+  void onFrame();
 
-  void MainLoop();
+  // A function called only once at the very end.
+  void onFinish();
 
+  // A function that tells if the application is still running.
   bool isRunning();
 
-public:
-  struct VertexAttributes {
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec3 color;
-    glm::vec2 uv;
-  };
+private:
+  bool initWindowAndDevice();
+  void terminateWindowAndDevice();
+
+  bool initDepthBuffer();
+  void terminateDepthBuffer();
+
+  bool initRenderPipeline();
+  void terminateRenderPipeline();
+
+  bool initTexture();
+  void terminateTexture();
+
+  bool initGeometry();
+  void terminateGeometry();
+
+  bool initUniforms();
+  void terminateUniforms();
+
+  bool initBindGroup();
+  void terminateBindGroup();
+
+  wgpu::TextureView getNextSurfaceViewData();
 
 private:
-  wgpu::TextureView _GetNextSurfaceViewData();
-  void _InitializePipeline();
-  void _InitializeBuffers();
-  void _InitializeBindGroups();
-  void _InitializeDepthStencil();
-  void _InitializeTextures();
-  wgpu::RequiredLimits _GetRequiredLimits(wgpu::Adapter adapter) const;
+  // (Just aliases to make notations lighter)
+  using mat4x4 = glm::mat4x4;
+  using vec4 = glm::vec4;
+  using vec3 = glm::vec3;
+  using vec2 = glm::vec2;
 
-private:
-  GLFWwindow *window;
-  wgpu::Device device;
-  wgpu::Queue queue;
-  wgpu::Surface surface;
-  std::unique_ptr<wgpu::ErrorCallback> uncapturedErrorCallbackHandle;
-  wgpu::RenderPipeline pipeline;
-  wgpu::TextureFormat surfaceFormat = wgpu::TextureFormat::Undefined;
-  wgpu::TextureFormat depthTextureFormat = wgpu::TextureFormat::Undefined;
-  wgpu::TextureView depthTextureView;
-  wgpu::TextureView colorTextureView;
-  wgpu::Texture depthTexture;
-  wgpu::Texture colorTexture;
-  wgpu::PipelineLayout layout;
-  wgpu::BindGroupLayout bindGroupLayout;
-  wgpu::BindGroup bindGroup;
-  wgpu::Sampler sampler;
-
-  wgpu::Buffer vertexBuffer;
-  wgpu::Buffer uniformBuffer;
-  uint32_t indexCount;
-
+  /**
+   * The same structure as in the shader, replicated in C++
+   */
   struct MyUniforms {
-    glm::mat4x4 projectionMatrix;
-    glm::mat4x4 viewMatrix;
-    glm::mat4x4 modelMatrix;
-    glm::vec4 color;
+    // We add transform matrices
+    mat4x4 projectionMatrix;
+    mat4x4 viewMatrix;
+    mat4x4 modelMatrix;
+    vec4 color;
     float time;
     float _pad[3];
-  } uniforms;
+  };
+  // Have the compiler check byte alignment
+  static_assert(sizeof(MyUniforms) % 16 == 0);
+
+  // Window and Device
+  GLFWwindow *m_window = nullptr;
+  wgpu::Instance m_instance = nullptr;
+  wgpu::Surface m_surface = nullptr;
+  wgpu::TextureFormat m_surfaceFormat = wgpu::TextureFormat::Undefined;
+  wgpu::Device m_device = nullptr;
+  wgpu::Queue m_queue = nullptr;
+  // Keep the error callback alive
+  std::unique_ptr<wgpu::ErrorCallback> m_errorCallbackHandle;
+
+  // Depth Buffer
+  wgpu::TextureFormat m_depthTextureFormat = wgpu::TextureFormat::Depth24Plus;
+  wgpu::Texture m_depthTexture = nullptr;
+  wgpu::TextureView m_depthTextureView = nullptr;
+
+  // Render Pipeline
+  wgpu::BindGroupLayout m_bindGroupLayout = nullptr;
+  wgpu::ShaderModule m_shaderModule = nullptr;
+  wgpu::RenderPipeline m_pipeline = nullptr;
+
+  // Texture
+  wgpu::Sampler m_sampler = nullptr;
+  wgpu::Texture m_texture = nullptr;
+  wgpu::TextureView m_textureView = nullptr;
+
+  // Geometry
+  wgpu::Buffer m_vertexBuffer = nullptr;
+  int m_vertexCount = 0;
+
+  // Uniforms
+  wgpu::Buffer m_uniformBuffer = nullptr;
+  MyUniforms m_uniforms;
+
+  // Bind Group
+  wgpu::BindGroup m_bindGroup = nullptr;
 };

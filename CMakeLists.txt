@@ -18,7 +18,7 @@ add_subdirectory(webgpu)
 add_subdirectory(glfw3webgpu)
 
 add_executable(App main.cpp
-  webgpu_impl.cpp
+  implementations.cpp
   Application.h
   Application.cpp
   ResourceManager.h
@@ -70,7 +70,7 @@ if (MSVC)
 	target_compile_options(App PRIVATE /W4)
   target_compile_options(App PUBLIC /wd4244)
 else()
-	target_compile_options(App PRIVATE -Wall -Wextra -pedantic)
+	target_compile_options(App PRIVATE -Wall -Wextra -pedantic -ferror-limit=0)
 endif()
 
 if (XCODE)
