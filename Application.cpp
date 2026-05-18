@@ -174,8 +174,12 @@ void Application::MainLoop() {
   uniforms.time =
       static_cast<float>(glfwGetTime()); // glfwGetTime returns a double
   // Only update the 1-st float of the buffer
-  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, time), &uniforms.time,
-                    sizeof(MyUniforms::time));
+  float viewZ =
+      glm::mix(0.0f, 0.25f, cos(2 * PI * uniforms.time / 4) * 0.5 + 0.5);
+  uniforms.viewMatrix =
+      glm::lookAt(vec3(-0.5f, -1.5f, viewZ + 0.25f), vec3(0.0f), vec3(0, 0, 1));
+  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, viewMatrix),
+                    &uniforms.viewMatrix, sizeof(MyUniforms::viewMatrix));
 
   // NOTE: Get the target view to present
   TextureView targetView = _GetNextSurfaceViewData();
@@ -306,7 +310,7 @@ void Application::_InitializeTextures() {
   // [...] setup texture descriptor
   textureDesc.dimension = TextureDimension::_2D;
   textureDesc.size = {256, 256, 1};
-  textureDesc.mipLevelCount = 1;
+  textureDesc.mipLevelCount = 8;
   textureDesc.sampleCount = 1;
   textureDesc.format = TextureFormat::RGBA8Unorm;
   textureDesc.usage = TextureUsage::TextureBinding | TextureUsage::CopyDst;
@@ -316,24 +320,12 @@ void Application::_InitializeTextures() {
   colorTexture = device.createTexture(textureDesc);
   std::cout << "Color texture: " << colorTexture << std::endl;
 
-  std::vector<uint8> pixels(4 * textureDesc.size.width *
-                            textureDesc.size.height);
-  for (uint32_t i = 0; i < textureDesc.size.width; ++i) {
-    for (uint32_t j = 0; j < textureDesc.size.height; ++j) {
-      uint8_t *p = &pixels[4 * (j * textureDesc.size.width + i)];
-      p[0] = (i / 16) % 2 == (j / 16) % 2 ? 255 : 0; // R
-      p[1] = ((i - j) / 16) % 2 == 0 ? 255 : 0;      // G
-      p[2] = ((i + j) / 16) % 2 == 0 ? 255 : 0;      // B
-      p[3] = 255;                                    // A
-    }
-  }
-
   TextureViewDescriptor textureViewDesc;
   textureViewDesc.aspect = TextureAspect::All;
   textureViewDesc.baseArrayLayer = 0;
   textureViewDesc.arrayLayerCount = 1;
   textureViewDesc.baseMipLevel = 0;
-  textureViewDesc.mipLevelCount = 1;
+  textureViewDesc.mipLevelCount = textureDesc.mipLevelCount;
   textureViewDesc.dimension = TextureViewDimension::_2D;
   textureViewDesc.format = textureDesc.format;
   colorTextureView = colorTexture.createView(textureViewDesc);
@@ -350,8 +342,66 @@ void Application::_InitializeTextures() {
   source.bytesPerRow = 4 * textureDesc.size.width;
   source.rowsPerImage = textureDesc.size.height;
 
-  queue.writeTexture(destination, pixels.data(), pixels.size(), source,
-                     textureDesc.size);
+  Extent3D mipLevelSize = textureDesc.size;
+  std::vector<uint8_t> previousLevelPixels;
+  for (uint32_t level = 0; level < textureDesc.mipLevelCount; ++level) {
+    std::vector<uint8_t> pixels(4 * mipLevelSize.width * mipLevelSize.height);
+    for (uint32_t i = 0; i < mipLevelSize.width; ++i) {
+      for (uint32_t j = 0; j < mipLevelSize.height; ++j) {
+        uint8_t *p = &pixels[4 * (j * mipLevelSize.width + i)];
+        if (level == 0) {
+          p[0] = (i / 16) % 2 == (j / 16) % 2 ? 255 : 0; // R
+          p[1] = ((i - j) / 16) % 2 == 0 ? 255 : 0;      // G
+          p[2] = ((i + j) / 16) % 2 == 0 ? 255 : 0;      // B
+        } else {
+          uint8_t *p00 =
+              &previousLevelPixels[4 * ((2 * j + 0) * (2 * mipLevelSize.width) +
+                                        (2 * i + 0))];
+          uint8_t *p01 =
+              &previousLevelPixels[4 * ((2 * j + 0) * (2 * mipLevelSize.width) +
+                                        (2 * i + 1))];
+
+          uint8_t *p10 =
+              &previousLevelPixels[4 * ((2 * j + 1) * (2 * mipLevelSize.width) +
+                                        (2 * i + 0))];
+
+          uint8_t *p11 =
+              &previousLevelPixels[4 * ((2 * j + 1) * (2 * mipLevelSize.width) +
+                                        (2 * i + 1))];
+          p[0] = (p00[0] + p01[0] + p10[0] + p11[0]) / 4; // R
+          p[1] = (p00[1] + p01[1] + p10[1] + p11[1]) / 4; // G
+          p[2] = (p00[2] + p01[2] + p10[2] + p11[2]) / 4; // B
+        }
+        p[3] = 255; // A
+      }
+    }
+
+    destination.mipLevel = level;
+
+    source.bytesPerRow = 4 * mipLevelSize.width;
+    source.rowsPerImage = mipLevelSize.height;
+
+    queue.writeTexture(destination, pixels.data(), pixels.size(), source,
+                       mipLevelSize);
+
+    mipLevelSize.width /= 2;
+    mipLevelSize.height /= 2;
+
+    previousLevelPixels = std::move(pixels);
+  }
+
+  SamplerDescriptor samplerDesc;
+  samplerDesc.addressModeU = AddressMode::Repeat;
+  samplerDesc.addressModeV = AddressMode::Repeat;
+  samplerDesc.addressModeW = AddressMode::ClampToEdge;
+  samplerDesc.magFilter = FilterMode::Linear;
+  samplerDesc.minFilter = FilterMode::Linear;
+  samplerDesc.mipmapFilter = MipmapFilterMode::Linear;
+  samplerDesc.lodMinClamp = 0.0f;
+  samplerDesc.lodMaxClamp = 8.0f;
+  samplerDesc.compare = CompareFunction::Undefined;
+  samplerDesc.maxAnisotropy = 1;
+  sampler = device.createSampler(samplerDesc);
 }
 
 void Application::_InitializeDepthStencil() {
@@ -492,7 +542,7 @@ void Application::_InitializePipeline() {
   pipelineDesc.multisample.alphaToCoverageEnabled = false;
 
   // Since we now have 2 bindings, we use a vector to store them
-  std::vector<BindGroupLayoutEntry> bindingLayoutEntries(2, Default);
+  std::vector<BindGroupLayoutEntry> bindingLayoutEntries(3, Default);
 
   // The uniform buffer binding that we already had
   BindGroupLayoutEntry &bindingLayout = bindingLayoutEntries[0];
@@ -507,6 +557,11 @@ void Application::_InitializePipeline() {
   textureBindingLayout.visibility = ShaderStage::Fragment;
   textureBindingLayout.texture.sampleType = TextureSampleType::Float;
   textureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
+
+  BindGroupLayoutEntry &samplerBindingLayout = bindingLayoutEntries[2];
+  samplerBindingLayout.binding = 2;
+  samplerBindingLayout.visibility = ShaderStage::Fragment;
+  samplerBindingLayout.sampler.type = SamplerBindingType::Filtering;
 
   // Create a bind group layout
   BindGroupLayoutDescriptor bindGroupLayoutDesc{};
@@ -527,7 +582,7 @@ void Application::_InitializePipeline() {
 }
 
 void Application::_InitializeBindGroups() {
-  std::vector<BindGroupEntry> bindings(2);
+  std::vector<BindGroupEntry> bindings(3);
 
   bindings[0].binding = 0;
   bindings[0].buffer = uniformBuffer;
@@ -536,6 +591,9 @@ void Application::_InitializeBindGroups() {
 
   bindings[1].binding = 1;
   bindings[1].textureView = colorTextureView;
+
+  bindings[2].binding = 2;
+  bindings[2].sampler = sampler;
 
   BindGroupDescriptor bindGroupDesc;
   bindGroupDesc.layout = bindGroupLayout;
@@ -549,7 +607,7 @@ void Application::_InitializeBuffers() {
   std::vector<float> pointData;
   std::vector<VertexAttributes> vertexData;
 
-  bool success = ResourceManager::LoadGeometryFromObj(RESOURCE_DIR "/cube.obj",
+  bool success = ResourceManager::LoadGeometryFromObj(RESOURCE_DIR "/plane.obj",
                                                       vertexData);
 
   if (!success) {
@@ -612,6 +670,7 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   requiredLimits.limits.maxTextureArrayLayers = 1;
   // Add the possibility to sample a texture in a shader
   requiredLimits.limits.maxSampledTexturesPerShaderStage = 1;
+  requiredLimits.limits.maxSamplersPerShaderStage = 1;
 
   return requiredLimits;
 }

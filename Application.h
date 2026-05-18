@@ -49,6 +49,7 @@ private:
   wgpu::PipelineLayout layout;
   wgpu::BindGroupLayout bindGroupLayout;
   wgpu::BindGroup bindGroup;
+  wgpu::Sampler sampler;
 
   wgpu::Buffer vertexBuffer;
   wgpu::Buffer uniformBuffer;
