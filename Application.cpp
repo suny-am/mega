@@ -1,8 +1,9 @@
 #include "Application.h"
 #include "ResourceManager.h"
 #include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/matrix_transform.hpp"
 #include "glm/ext/vector_float3.hpp"
-#include "webgpu-utils.h"
+// #include "webgpu-utils.h"
 #include <GLFW/glfw3.h>
 #include <cstddef>
 #include <glfw3webgpu.h>
@@ -14,6 +15,8 @@
 
 using namespace wgpu;
 using namespace glm;
+
+constexpr float PI = 3.14159265358979323846f;
 
 void wgpuPollEvents([[maybe_unused]] Device device,
                     [[maybe_unused]] bool yieldToWebBrowser) {
@@ -401,7 +404,7 @@ void Application::_InitializePipeline() {
   VertexBufferLayout vertexBufferLayout;
 
   // NOTE: 3 attributes: position, normal and color
-  std::vector<VertexAttribute> vertexAttribs(3);
+  std::vector<VertexAttribute> vertexAttribs(4);
 
   // NOTE: describe position attribute
   vertexAttribs[0].shaderLocation = 0;
@@ -417,6 +420,11 @@ void Application::_InitializePipeline() {
   vertexAttribs[2].shaderLocation = 2;
   vertexAttribs[2].format = VertexFormat::Float32x3;
   vertexAttribs[2].offset = offsetof(VertexAttributes, color);
+
+  // NOTE: describe uv attribute
+  vertexAttribs[3].shaderLocation = 3;
+  vertexAttribs[3].format = VertexFormat::Float32x2;
+  vertexAttribs[3].offset = offsetof(VertexAttributes, uv);
 
   vertexBufferLayout.attributeCount =
       static_cast<uint32_t>(vertexAttribs.size());
@@ -541,7 +549,7 @@ void Application::_InitializeBuffers() {
   std::vector<float> pointData;
   std::vector<VertexAttributes> vertexData;
 
-  bool success = ResourceManager::LoadGeometryFromObj(RESOURCE_DIR "/plane.obj",
+  bool success = ResourceManager::LoadGeometryFromObj(RESOURCE_DIR "/cube.obj",
                                                       vertexData);
 
   if (!success) {
@@ -571,8 +579,12 @@ void Application::_InitializeBuffers() {
 
   // NOTE: update uniforms here
   uniforms.modelMatrix = mat4x4(1.0);
-  uniforms.viewMatrix = scale(mat4x4(1.0), vec3(1.0f));
-  uniforms.projectionMatrix = ortho(-1, 1, -1, 1, -1, 1);
+  uniforms.viewMatrix = lookAt(
+      vec3(-2.0f, -3.0f, 2.0f), vec3(0.0f),
+      vec3(0, 0, 1)); // the last argument indicates our Up direction convention
+  uniforms.projectionMatrix =
+      perspective(45 * PI / 180, 640.0f / 480.0f, 0.01f, 100.0f);
+
   uniforms.time = 1.0f;
   uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
   queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
@@ -583,7 +595,7 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   adapter.getLimits(&supportedLimits);
   RequiredLimits requiredLimits = Default;
   requiredLimits.limits = supportedLimits.limits;
-  requiredLimits.limits.maxVertexAttributes = 3;
+  requiredLimits.limits.maxVertexAttributes = 4;
   requiredLimits.limits.maxVertexBuffers = 1;
   requiredLimits.limits.maxBufferSize = 10000 * sizeof(VertexAttributes);
   requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
@@ -591,7 +603,7 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
       supportedLimits.limits.minStorageBufferOffsetAlignment;
   requiredLimits.limits.minUniformBufferOffsetAlignment =
       supportedLimits.limits.minUniformBufferOffsetAlignment;
-  requiredLimits.limits.maxInterStageShaderComponents = 6;
+  requiredLimits.limits.maxInterStageShaderComponents = 8;
   requiredLimits.limits.maxBindGroups = 1;
   requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
   requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
