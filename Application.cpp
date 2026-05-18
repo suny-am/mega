@@ -173,13 +173,7 @@ void Application::MainLoop() {
   // Update uniform buffer
   uniforms.time =
       static_cast<float>(glfwGetTime()); // glfwGetTime returns a double
-  // Only update the 1-st float of the buffer
-  float viewZ =
-      glm::mix(0.0f, 0.25f, cos(2 * PI * uniforms.time / 4) * 0.5 + 0.5);
-  uniforms.viewMatrix =
-      glm::lookAt(vec3(-0.5f, -1.5f, viewZ + 0.25f), vec3(0.0f), vec3(0, 0, 1));
-  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, viewMatrix),
-                    &uniforms.viewMatrix, sizeof(MyUniforms::viewMatrix));
+  queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
 
   // NOTE: Get the target view to present
   TextureView targetView = _GetNextSurfaceViewData();
@@ -304,96 +298,21 @@ TextureView Application::_GetNextSurfaceViewData() {
 }
 
 void Application::_InitializeTextures() {
-  // NOTE: we do not have any textures in this sample, but this is where you
-  // would initialize them
-  TextureDescriptor textureDesc;
-  // [...] setup texture descriptor
-  textureDesc.dimension = TextureDimension::_2D;
-  textureDesc.size = {256, 256, 1};
-  textureDesc.mipLevelCount = 8;
-  textureDesc.sampleCount = 1;
-  textureDesc.format = TextureFormat::RGBA8Unorm;
-  textureDesc.usage = TextureUsage::TextureBinding | TextureUsage::CopyDst;
-  textureDesc.viewFormatCount = 0;
-  textureDesc.viewFormats = nullptr;
+  colorTexture = ResourceManager::LoadTexture(
+      RESOURCE_DIR "/fourareen2K_albedo.jpg", device, &colorTextureView);
+  if (!colorTexture) {
+    std::cerr << "Could not load texture!" << std::endl;
+    exit(1);
+  }
 
-  colorTexture = device.createTexture(textureDesc);
   std::cout << "Color texture: " << colorTexture << std::endl;
 
-  TextureViewDescriptor textureViewDesc;
-  textureViewDesc.aspect = TextureAspect::All;
-  textureViewDesc.baseArrayLayer = 0;
-  textureViewDesc.arrayLayerCount = 1;
-  textureViewDesc.baseMipLevel = 0;
-  textureViewDesc.mipLevelCount = textureDesc.mipLevelCount;
-  textureViewDesc.dimension = TextureViewDimension::_2D;
-  textureViewDesc.format = textureDesc.format;
-  colorTextureView = colorTexture.createView(textureViewDesc);
   std::cout << "Color texture view: " << colorTextureView << std::endl;
-
-  ImageCopyTexture destination;
-  destination.texture = colorTexture;
-  destination.mipLevel = 0;
-  destination.origin = {0, 0, 0};
-  destination.aspect = TextureAspect::All;
-
-  TextureDataLayout source;
-  source.offset = 0;
-  source.bytesPerRow = 4 * textureDesc.size.width;
-  source.rowsPerImage = textureDesc.size.height;
-
-  Extent3D mipLevelSize = textureDesc.size;
-  std::vector<uint8_t> previousLevelPixels;
-  for (uint32_t level = 0; level < textureDesc.mipLevelCount; ++level) {
-    std::vector<uint8_t> pixels(4 * mipLevelSize.width * mipLevelSize.height);
-    for (uint32_t i = 0; i < mipLevelSize.width; ++i) {
-      for (uint32_t j = 0; j < mipLevelSize.height; ++j) {
-        uint8_t *p = &pixels[4 * (j * mipLevelSize.width + i)];
-        if (level == 0) {
-          p[0] = (i / 16) % 2 == (j / 16) % 2 ? 255 : 0; // R
-          p[1] = ((i - j) / 16) % 2 == 0 ? 255 : 0;      // G
-          p[2] = ((i + j) / 16) % 2 == 0 ? 255 : 0;      // B
-        } else {
-          uint8_t *p00 =
-              &previousLevelPixels[4 * ((2 * j + 0) * (2 * mipLevelSize.width) +
-                                        (2 * i + 0))];
-          uint8_t *p01 =
-              &previousLevelPixels[4 * ((2 * j + 0) * (2 * mipLevelSize.width) +
-                                        (2 * i + 1))];
-
-          uint8_t *p10 =
-              &previousLevelPixels[4 * ((2 * j + 1) * (2 * mipLevelSize.width) +
-                                        (2 * i + 0))];
-
-          uint8_t *p11 =
-              &previousLevelPixels[4 * ((2 * j + 1) * (2 * mipLevelSize.width) +
-                                        (2 * i + 1))];
-          p[0] = (p00[0] + p01[0] + p10[0] + p11[0]) / 4; // R
-          p[1] = (p00[1] + p01[1] + p10[1] + p11[1]) / 4; // G
-          p[2] = (p00[2] + p01[2] + p10[2] + p11[2]) / 4; // B
-        }
-        p[3] = 255; // A
-      }
-    }
-
-    destination.mipLevel = level;
-
-    source.bytesPerRow = 4 * mipLevelSize.width;
-    source.rowsPerImage = mipLevelSize.height;
-
-    queue.writeTexture(destination, pixels.data(), pixels.size(), source,
-                       mipLevelSize);
-
-    mipLevelSize.width /= 2;
-    mipLevelSize.height /= 2;
-
-    previousLevelPixels = std::move(pixels);
-  }
 
   SamplerDescriptor samplerDesc;
   samplerDesc.addressModeU = AddressMode::Repeat;
   samplerDesc.addressModeV = AddressMode::Repeat;
-  samplerDesc.addressModeW = AddressMode::ClampToEdge;
+  samplerDesc.addressModeW = AddressMode::Repeat;
   samplerDesc.magFilter = FilterMode::Linear;
   samplerDesc.minFilter = FilterMode::Linear;
   samplerDesc.mipmapFilter = MipmapFilterMode::Linear;
@@ -607,8 +526,8 @@ void Application::_InitializeBuffers() {
   std::vector<float> pointData;
   std::vector<VertexAttributes> vertexData;
 
-  bool success = ResourceManager::LoadGeometryFromObj(RESOURCE_DIR "/plane.obj",
-                                                      vertexData);
+  bool success = ResourceManager::LoadGeometryFromObj(
+      RESOURCE_DIR "/fourareen.obj", vertexData);
 
   if (!success) {
     std::cerr << "Could not load geometry" << std::endl;
@@ -637,11 +556,10 @@ void Application::_InitializeBuffers() {
 
   // NOTE: update uniforms here
   uniforms.modelMatrix = mat4x4(1.0);
-  uniforms.viewMatrix = lookAt(
-      vec3(-2.0f, -3.0f, 2.0f), vec3(0.0f),
-      vec3(0, 0, 1)); // the last argument indicates our Up direction convention
+  uniforms.viewMatrix =
+      glm::lookAt(vec3(-2.0f, -3.0f, 2.0f), vec3(0.0f), vec3(0, 0, 1));
   uniforms.projectionMatrix =
-      perspective(45 * PI / 180, 640.0f / 480.0f, 0.01f, 100.0f);
+      glm::perspective(45 * PI / 180, 640.0f / 480.0f, 0.01f, 100.0f);
 
   uniforms.time = 1.0f;
   uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
@@ -655,7 +573,7 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   requiredLimits.limits = supportedLimits.limits;
   requiredLimits.limits.maxVertexAttributes = 4;
   requiredLimits.limits.maxVertexBuffers = 1;
-  requiredLimits.limits.maxBufferSize = 10000 * sizeof(VertexAttributes);
+  requiredLimits.limits.maxBufferSize = 150000 * sizeof(VertexAttributes);
   requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
   requiredLimits.limits.minStorageBufferOffsetAlignment =
       supportedLimits.limits.minStorageBufferOffsetAlignment;
@@ -665,8 +583,8 @@ RequiredLimits Application::_GetRequiredLimits(Adapter adapter) const {
   requiredLimits.limits.maxBindGroups = 1;
   requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
   requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
-  requiredLimits.limits.maxTextureDimension1D = 480;
-  requiredLimits.limits.maxTextureDimension2D = 640;
+  requiredLimits.limits.maxTextureDimension1D = 2048;
+  requiredLimits.limits.maxTextureDimension2D = 2048;
   requiredLimits.limits.maxTextureArrayLayers = 1;
   // Add the possibility to sample a texture in a shader
   requiredLimits.limits.maxSampledTexturesPerShaderStage = 1;

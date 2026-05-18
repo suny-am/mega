@@ -31,7 +31,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
   out.color = in.color;
   out.normal = (uMyUniforms.modelMatrix * vec4f(in.normal, 0.0)).xyz;
-  out.uv = in.uv * 6.0;
+  out.uv = in.uv;
   return out;
 }
 

@@ -68,6 +68,7 @@ set_target_properties(App PROPERTIES
 
 if (MSVC)
 	target_compile_options(App PRIVATE /W4)
+  target_compile_options(App PUBLIC /wd4244)
 else()
 	target_compile_options(App PRIVATE -Wall -Wextra -pedantic)
 endif()
