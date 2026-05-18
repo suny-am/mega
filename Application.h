@@ -15,6 +15,12 @@ public:
   // `onInit`.
   void onFrame();
 
+  // A function called when the window is resized, with the new width and
+  // height.
+  void onResize();
+
+  void updateProjectionMatrix();
+
   // A function called only once at the very end.
   void onFinish();
 
@@ -27,6 +33,8 @@ private:
 
   bool initDepthBuffer();
   void terminateDepthBuffer();
+
+  bool initSurfaceConfiguration();
 
   bool initRenderPipeline();
   void terminateRenderPipeline();

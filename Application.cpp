@@ -120,6 +120,14 @@ void Application::onFrame() {
 #endif
 }
 
+void Application::onResize() {
+  terminateDepthBuffer();
+
+  initSurfaceConfiguration();
+  initDepthBuffer();
+  updateProjectionMatrix();
+}
+
 void Application::onFinish() {
   terminateBindGroup();
   terminateUniforms();
@@ -128,6 +136,16 @@ void Application::onFinish() {
   terminateRenderPipeline();
   terminateDepthBuffer();
   terminateWindowAndDevice();
+}
+
+void Application::updateProjectionMatrix() {
+  int width, height;
+  glfwGetFramebufferSize(m_window, &width, &height);
+  m_uniforms.projectionMatrix =
+      glm::perspective(45 * PI / 180, (float)width / height, 0.01f, 100.0f);
+  m_queue.writeBuffer(m_uniformBuffer, offsetof(MyUniforms, projectionMatrix),
+                      &m_uniforms.projectionMatrix,
+                      sizeof(MyUniforms::projectionMatrix));
 }
 
 bool Application::isRunning() { return !glfwWindowShouldClose(m_window); }
@@ -148,7 +166,7 @@ bool Application::initWindowAndDevice() {
   }
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+  glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
   m_window = glfwCreateWindow(640, 480, "Learn WebGPU", NULL, NULL);
   if (!m_window) {
     std::cerr << "Could not open window!" << std::endl;
@@ -164,6 +182,17 @@ bool Application::initWindowAndDevice() {
 
   SupportedLimits supportedLimits;
   adapter.getLimits(&supportedLimits);
+
+  int count;
+  GLFWmonitor **monitors = glfwGetMonitors(&count);
+
+  std::cout << "Monitor count: " << count << std::endl;
+
+  int width, height;
+  glfwGetMonitorWorkarea(monitors[count - 1], nullptr, nullptr, &width,
+                         &height);
+
+  std::cout << "Monitor work area: " << width << "x" << height << std::endl;
 
   std::cout << "Requesting device..." << std::endl;
   RequiredLimits requiredLimits = Default;
@@ -181,8 +210,6 @@ bool Application::initWindowAndDevice() {
   requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
   requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
   // Allow textures up to 2K
-  requiredLimits.limits.maxTextureDimension1D = 2048;
-  requiredLimits.limits.maxTextureDimension2D = 2048;
   requiredLimits.limits.maxTextureArrayLayers = 1;
   requiredLimits.limits.maxSampledTexturesPerShaderStage = 1;
   requiredLimits.limits.maxSamplersPerShaderStage = 1;
@@ -207,8 +234,10 @@ bool Application::initWindowAndDevice() {
 
   SurfaceConfiguration surfaceConfig = {};
 
-  surfaceConfig.width = 640;
-  surfaceConfig.height = 480;
+  glfwGetFramebufferSize(m_window, &width, &height);
+
+  surfaceConfig.width = width;
+  surfaceConfig.height = height;
   m_surfaceFormat = m_surface.getPreferredFormat(adapter);
   surfaceConfig.format = m_surfaceFormat;
   surfaceConfig.viewFormatCount = 0;
@@ -221,6 +250,15 @@ bool Application::initWindowAndDevice() {
   m_surface.configure(surfaceConfig);
 
   adapter.release();
+
+  glfwSetWindowUserPointer(m_window, this);
+  glfwSetWindowSizeCallback(m_window, [](GLFWwindow *window, int, int) {
+    auto that =
+        reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+    if (that != nullptr)
+      that->onResize();
+  });
+
   return m_device != nullptr;
 }
 
@@ -234,14 +272,41 @@ void Application::terminateWindowAndDevice() {
   glfwTerminate();
 }
 
+bool Application::initSurfaceConfiguration() {
+  SurfaceConfiguration surfaceConfig = {};
+
+  int width, height;
+  glfwGetFramebufferSize(m_window, &width, &height);
+
+  surfaceConfig.width = width;
+  surfaceConfig.height = height;
+  surfaceConfig.format = m_surfaceFormat;
+  surfaceConfig.viewFormatCount = 0;
+  surfaceConfig.viewFormats = nullptr;
+  surfaceConfig.usage = TextureUsage::RenderAttachment;
+  surfaceConfig.device = m_device;
+  surfaceConfig.presentMode = PresentMode::Fifo;
+  surfaceConfig.alphaMode = CompositeAlphaMode::Auto;
+
+  m_surface.configure(surfaceConfig);
+
+  return true;
+}
+
 bool Application::initDepthBuffer() {
+  int width, height;
+  glfwGetFramebufferSize(m_window, &width, &height);
+
+  std::cout << "frame buffer size: " << width << "x" << height << std::endl;
+
   // Create the depth texture
   TextureDescriptor depthTextureDesc;
   depthTextureDesc.dimension = TextureDimension::_2D;
   depthTextureDesc.format = m_depthTextureFormat;
   depthTextureDesc.mipLevelCount = 1;
   depthTextureDesc.sampleCount = 1;
-  depthTextureDesc.size = {640, 480, 1};
+  depthTextureDesc.size = {static_cast<uint32_t>(width),
+                           static_cast<uint32_t>(height), 1};
   depthTextureDesc.usage = TextureUsage::RenderAttachment;
   depthTextureDesc.viewFormatCount = 1;
   depthTextureDesc.viewFormats = (WGPUTextureFormat *)&m_depthTextureFormat;
