@@ -1,8 +1,14 @@
 #include "Application.h"
 
-int main(int, char **) {
+int main(int argc, char **argv) {
 
   Application app;
+  // read mouse or trackball mode from argument and set it in the Application
+  if (argc > 1) {
+    std::string mode = argv[1];
+    app.setMouseMode(mode == "trackpad" ? Application::MouseMode::Trackpad
+                                        : Application::MouseMode::Mouse);
+  }
 
   if (!app.onInit()) {
     return 1;

@@ -8,6 +8,10 @@ struct GLFWwindow;
 
 class Application {
 public:
+  enum class CameraMode { Arcball, FirstPerson, Trackpad };
+  enum class MouseMode { Mouse, Trackpad };
+
+public:
   // A function called only once at the beginning. Returns false is init failed.
   bool onInit();
 
@@ -19,13 +23,21 @@ public:
   // height.
   void onResize();
 
+  void onMouseMove(double xPos, double yPos);
+  void onMouseButton(int button, int action, int mods);
+  void onScroll(double xOffset, double yOffset);
+
   void updateProjectionMatrix();
+
+  void updateViewMatrix();
 
   // A function called only once at the very end.
   void onFinish();
 
   // A function that tells if the application is still running.
   bool isRunning();
+
+  void setMouseMode(MouseMode mode);
 
 private:
   bool initWindowAndDevice();
@@ -51,6 +63,8 @@ private:
   bool initBindGroup();
   void terminateBindGroup();
 
+  void updateDragInertia();
+
   wgpu::TextureView getNextSurfaceViewData();
 
 private:
@@ -74,6 +88,29 @@ private:
   };
   // Have the compiler check byte alignment
   static_assert(sizeof(MyUniforms) % 16 == 0);
+
+  struct CameraState {
+    // TODO: change camera logic based on mode
+    CameraMode mode = CameraMode::Arcball;
+    vec2 angles = {0.8f, 0.5f};
+    float zoom = -1.2f;
+  };
+
+  struct DragState {
+    bool active = false;
+
+    vec2 startMouse;
+
+    CameraState startCameraState;
+
+    float sensitivity = 0.01f;
+    float scrollSensitivity = 0.1f;
+
+    // inertia
+    vec2 velocity = {0.0f, 0.0f};
+    vec2 previousDelta;
+    float inertia = 0.9f;
+  };
 
   // Window and Device
   GLFWwindow *m_window = nullptr;
@@ -110,4 +147,10 @@ private:
 
   // Bind Group
   wgpu::BindGroup m_bindGroup = nullptr;
+
+  // Camera state
+  CameraState m_cameraState;
+
+  // Drag state
+  DragState m_drag;
 };

@@ -18,6 +18,19 @@ constexpr float PI = 3.14159265358979323846f;
 ///////////////////////////////////////////////////////////////////////////////
 // Public methods
 
+void Application::setMouseMode(MouseMode mode) {
+  switch (mode) {
+  case MouseMode::Trackpad:
+    std::cout << "Using trackpad mode" << std::endl;
+    m_cameraState.mode = CameraMode::Trackpad;
+    break;
+  case MouseMode::Mouse:
+    std::cout << "Using mouse mode" << std::endl;
+    m_cameraState.mode = CameraMode::Arcball;
+    break;
+  }
+}
+
 bool Application::onInit() {
   if (!initWindowAndDevice())
     return false;
@@ -37,6 +50,7 @@ bool Application::onInit() {
 }
 
 void Application::onFrame() {
+  updateDragInertia();
   glfwPollEvents();
 
   // Update uniform buffer
@@ -115,7 +129,6 @@ void Application::onFrame() {
   std::cout << "Waiting for tick..." << std::endl;
   wgpuDeviceTick(device);
 #elif defined(WEBGPU_BACKEND_WGPU)
-  std::cout << "Polling device..." << std::endl;
   m_device.poll(false);
 #endif
 }
@@ -138,6 +151,65 @@ void Application::onFinish() {
   terminateWindowAndDevice();
 }
 
+void Application::updateDragInertia() {
+  constexpr float eps = 1e-4f;
+
+  if (!m_drag.active) {
+    if (std::abs(m_drag.velocity.x) < eps &&
+        std::abs(m_drag.velocity.y) < eps) {
+      return;
+    }
+    m_drag.velocity *= m_drag.inertia;
+    m_cameraState.angles.y =
+        glm::clamp(m_cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
+    m_cameraState.angles += m_drag.velocity;
+    m_drag.velocity *= m_drag.inertia;
+    updateViewMatrix();
+  }
+}
+
+void Application::onMouseMove(double xPos, double yPos) {
+  if (m_drag.active) {
+    vec2 currentMouse;
+    if (m_cameraState.mode == CameraMode::Trackpad) {
+      currentMouse = vec2(-(float)yPos, (float)xPos);
+    } else {
+      currentMouse = vec2(-(float)xPos, (float)yPos);
+    }
+
+    vec2 delta = (currentMouse - m_drag.startMouse) * m_drag.sensitivity;
+    m_cameraState.angles = m_drag.startCameraState.angles + delta;
+    m_cameraState.angles.y =
+        glm::clamp(m_cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
+
+    m_drag.velocity = delta - m_drag.previousDelta;
+    m_drag.previousDelta = delta;
+    updateViewMatrix();
+  }
+}
+
+void Application::onMouseButton(int button, int action, int /* modifiers*/) {
+  if (button == GLFW_MOUSE_BUTTON_LEFT) {
+    switch (action) {
+    case GLFW_PRESS:
+      m_drag.active = true;
+      double xPos, yPos;
+      glfwGetCursorPos(m_window, &xPos, &yPos);
+      m_drag.startMouse = vec2(-(float)xPos, (float)yPos);
+      break;
+    case GLFW_RELEASE:
+      m_drag.active = false;
+      break;
+    }
+  }
+}
+
+void Application::onScroll(double /* xOffset */, double yOffset) {
+  m_cameraState.zoom += m_drag.scrollSensitivity * static_cast<float>(yOffset);
+  m_cameraState.zoom = glm::clamp(m_cameraState.zoom, -2.0f, 2.0f);
+  updateViewMatrix();
+}
+
 void Application::updateProjectionMatrix() {
   int width, height;
   glfwGetFramebufferSize(m_window, &width, &height);
@@ -148,6 +220,21 @@ void Application::updateProjectionMatrix() {
                       sizeof(MyUniforms::projectionMatrix));
 }
 
+void Application::updateViewMatrix() {
+  float cosX = cos(m_cameraState.angles.x);
+  float sinX = sin(m_cameraState.angles.x);
+  float cosY = cos(m_cameraState.angles.y);
+  float sinY = sin(m_cameraState.angles.y);
+
+  vec3 position =
+      vec3(cosY * cosX, sinY * cosX, sinX) * std::exp(-m_cameraState.zoom);
+
+  m_uniforms.viewMatrix = lookAt(position, vec3(0.0f), vec3(0, 0, 1));
+
+  m_queue.writeBuffer(m_uniformBuffer, offsetof(MyUniforms, viewMatrix),
+                      &m_uniforms.viewMatrix, sizeof(MyUniforms::viewMatrix));
+}
+
 bool Application::isRunning() { return !glfwWindowShouldClose(m_window); }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -156,7 +243,7 @@ bool Application::isRunning() { return !glfwWindowShouldClose(m_window); }
 bool Application::initWindowAndDevice() {
   m_instance = createInstance(InstanceDescriptor{});
   if (!m_instance) {
-    std::cerr << "Could not initialize WebGPU!" << std::endl;
+    std::cerr << "Could not initialize Mega!" << std::endl;
     return false;
   }
 
@@ -167,7 +254,7 @@ bool Application::initWindowAndDevice() {
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-  m_window = glfwCreateWindow(640, 480, "Learn WebGPU", NULL, NULL);
+  m_window = glfwCreateWindow(640, 480, "Mega", NULL, NULL);
   if (!m_window) {
     std::cerr << "Could not open window!" << std::endl;
     return false;
@@ -258,6 +345,30 @@ bool Application::initWindowAndDevice() {
     if (that != nullptr)
       that->onResize();
   });
+
+  glfwSetCursorPosCallback(
+      m_window, [](GLFWwindow *window, double xPos, double yPos) {
+        auto that =
+            reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+        if (that != nullptr)
+          that->onMouseMove(xPos, yPos);
+      });
+
+  glfwSetMouseButtonCallback(
+      m_window, [](GLFWwindow *window, int button, int action, int mods) {
+        auto that =
+            reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+        if (that != nullptr)
+          that->onMouseButton(button, action, mods);
+      });
+
+  glfwSetScrollCallback(
+      m_window, [](GLFWwindow *window, double xOffset, double yOffset) {
+        auto that =
+            reinterpret_cast<Application *>(glfwGetWindowUserPointer(window));
+        if (that != nullptr)
+          that->onScroll(xOffset, yOffset);
+      });
 
   return m_device != nullptr;
 }
@@ -552,6 +663,8 @@ bool Application::initUniforms() {
   m_uniforms.time = 1.0f;
   m_uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
   m_queue.writeBuffer(m_uniformBuffer, 0, &m_uniforms, sizeof(MyUniforms));
+
+  updateViewMatrix();
 
   return m_uniformBuffer != nullptr;
 }
